@@ -333,6 +333,20 @@ def add_bench():
         p['tables'].append(t);created.append(t['id'])
     touch(p);return jsonify(created=created,**state().get_json())
 
+@app.post('/api/hall-shape')
+def save_hall_shape():
+    p=project();d=request.get_json(force=True);cells=d.get('cells',[])
+    clean=[];seen=set()
+    if isinstance(cells,list):
+        for q in cells:
+            if not isinstance(q,dict):continue
+            try:x=int(q.get('x'));y=int(q.get('y'))
+            except (TypeError,ValueError):continue
+            if 0<=x<60 and 0<=y<40 and (x,y) not in seen:
+                seen.add((x,y));clean.append({'x':x,'y':y})
+    p['hall_shape']=clean
+    touch(p);return state()
+
 @app.post('/api/hall-objects')
 def add_hall_object():
     p=project();d=request.get_json(force=True);p.setdefault('hall_objects',[])
