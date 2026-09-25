@@ -62,3 +62,8 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
 .room-grid .builder-item,.room-grid .hall-object,.room-grid .empty-help,.room-grid .selection-box{z-index:3}.hall-draw-band{position:absolute;display:none;z-index:25;pointer-events:none;border:1.5px dashed #1672d4;background:#2790ff20;border-radius:2px}.hall-draw-band.erase{border-color:#dc2626;background:#ef444424}
 .hall-draw-tool b{font-family:Arial,sans-serif}.hall-draw-hint{background:#f7fbff;border:1px solid #cbdced;border-radius:9px;padding:7px 10px;font-size:10px;color:#52657d}.dark .hall-draw-hint{background:#121d2c;border-color:#334155;color:#aebcd0}
 .room-grid[data-tool="hallshape"],.room-grid[data-tool="hallerase"]{cursor:crosshair}.room-grid[data-tool="hallshape"] .empty-help,.room-grid[data-tool="hallerase"] .empty-help{display:none!important}
+
+/* Direct drafting V8 */
+.room-grid[data-tool="seat"],.room-grid[data-tool="bench"],.room-grid[data-tool="round"],.room-grid[data-tool="square"],.room-grid[data-tool="stage"],.room-grid[data-tool="aisle"],.room-grid[data-tool="zone"]{cursor:crosshair}
+.room-grid[data-tool="seat"] .empty-help,.room-grid[data-tool="bench"] .empty-help,.room-grid[data-tool="round"] .empty-help,.room-grid[data-tool="square"] .empty-help,.room-grid[data-tool="stage"] .empty-help,.room-grid[data-tool="aisle"] .empty-help,.room-grid[data-tool="zone"] .empty-help{display:none!important}
+#draftBand{border:2px solid #1976d2;background:#2196f326;box-shadow:inset 0 0 0 1px #fff8;z-index:40}
