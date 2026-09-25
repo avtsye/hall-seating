@@ -190,38 +190,37 @@ def hall():
 @app.post('/api/layout/draw')
 def draw_layout_item():
     p=project();d=request.get_json(force=True);kind=d.get('kind')
-    x=max(1,min(99,float(d.get('x',50))));y=max(1,min(99,float(d.get('y',50))))
-    w=max(1,min(96,float(d.get('w',6))));h=max(1,min(96,float(d.get('h',6))))
+    # Geometry is stored on the same 60x40 logical grid used by the editor.
+    gx=max(0,min(59,int(d.get('gx',0)))); gy=max(0,min(39,int(d.get('gy',0))))
+    gw=max(1,min(60-gx,int(d.get('gw',1)))); gh=max(1,min(40-gy,int(d.get('gh',1))))
+    x=(gx+gw/2)/60*100; y=(gy+gh/2)/40*100; w=gw/60*100; h=gh/40*100
     created=[]
-    def seat(px,py,name,bench_id=None,index=None):
-        t={'id':uid('t'),'name':name,'x':max(1,min(99,px)),'y':max(1,min(99,py)),'capacity':1,
-           'rank':max(1,round(py/10,1)),'custom_rank':False,'locked':False,'kind':'seat','shape':'chair',
-           'rotation':0,'w':0,'h':0,'zone':'','tags':[],'disabled':False}
+    def seat_cell(cx,cy,name,bench_id=None,index=None):
+        px=(cx+.5)/60*100; py=(cy+.5)/40*100
+        t={'id':uid('t'),'name':name,'x':px,'y':py,'capacity':1,'rank':max(1,round(py/10,1)),
+           'custom_rank':False,'locked':False,'kind':'seat','shape':'chair','rotation':0,
+           'w':100/60,'h':100/40,'gx':cx,'gy':cy,'gw':1,'gh':1,'zone':'','tags':[],'disabled':False}
         if bench_id:t['bench_id']=bench_id;t['bench_index']=index
         p['tables'].append(t);created.append(t['id'])
     if kind in ('round','square'):
         t={'id':uid('t'),'name':f"שולחן {len([q for q in p['tables'] if q.get('kind')!='seat'])+1}",
            'x':x,'y':y,'capacity':max(1,min(30,int(d.get('capacity',4)))),'rank':max(1,round(y/10,1)),
            'custom_rank':False,'locked':False,'kind':'table','shape':'round' if kind=='round' else 'square',
-           'rotation':0,'w':w,'h':h,'zone':'','tags':[],'disabled':False}
+           'rotation':0,'w':w,'h':h,'gx':gx,'gy':gy,'gw':gw,'gh':gh,'zone':'','tags':[],'disabled':False}
         p['tables'].append(t);created.append(t['id'])
     elif kind=='seat':
-        cols=max(1,min(30,int(round(w/3.2))));rows=max(1,min(30,int(round(h/4.2))))
-        for rr in range(rows):
-            for cc in range(cols):
-                px=x if cols==1 else x-w/2+w*(cc+.5)/cols
-                py=y if rows==1 else y-h/2+h*(rr+.5)/rows
-                seat(px,py,f'כיסא {len([q for q in p["tables"] if q.get("kind")=="seat"])+1}')
+        for rr in range(gh):
+            for cc in range(gw):
+                seat_cell(gx+cc,gy+rr,f'כיסא {len([q for q in p["tables"] if q.get("kind")=="seat"])+1}')
     elif kind=='bench':
-        import math
-        horizontal=w>=h;length=w if horizontal else h;count=max(2,min(30,int(d.get('count') or round(length/3.2))))
-        bid=uid('bench')
+        horizontal=gw>=gh; count=gw if horizontal else gh; bid=uid('bench')
+        fixed_y=gy+(gh-1)//2; fixed_x=gx+(gw-1)//2
         for i in range(count):
-            off=0 if count==1 else (-length/2+length*(i+.5)/count)
-            seat(x+(off if horizontal else 0),y+(0 if horizontal else off),f'ספסל {bid[-4:]} · מקום {i+1}',bid,i+1)
+            seat_cell(gx+i if horizontal else fixed_x,fixed_y if horizontal else gy+i,f'ספסל {bid[-4:]} · מקום {i+1}',bid,i+1)
     elif kind in ('stage','aisle','zone'):
         names={'stage':'במה','aisle':'מעבר','zone':'אזור'}
-        o={'id':uid('o'),'kind':kind,'name':names[kind],'x':x,'y':y,'w':w,'h':h,'rotation':0}
+        o={'id':uid('o'),'kind':kind,'name':names[kind],'x':x,'y':y,'w':w,'h':h,'rotation':0,
+           'gx':gx,'gy':gy,'gw':gw,'gh':gh}
         p.setdefault('hall_objects',[]).append(o);created.append(o['id'])
     else:return jsonify(error='סוג שרטוט לא מוכר'),400
     touch(p);return jsonify(created=created,**state().get_json())
