@@ -15,9 +15,9 @@ def new_project(name='אולם חדש'):
     for r in range(5):
         for c in range(6):
             tables.append({'id':uid('t'),'name':f'שולחן {r*6+c+1}','x':8+c*15.5,'y':14+r*16,'capacity':4,
-                           'rank':round(1+r*1.0+abs(c-2.5)*.35,2),'custom_rank':False,'locked':False})
+                           'rank':round(1+r*1.0+abs(c-2.5)*.35,2),'custom_rank':False,'locked':False,'kind':'table','shape':'round'})
     return {'id':uid('p'),'name':name,'created':now(),'modified':now(),
-            'hall':{'name':'האולם','stage_label':'חזית / במה','width':100,'height':100},
+            'hall':{'name':'האולם','stage_label':'חזית / במה','width':100,'height':100,'seating_type':'round_tables'},
             'tables':tables,'groups':[], 'people':[], 'rules':[], 'snapshots':[]}
 
 def default_state():
@@ -115,7 +115,7 @@ def project_name():
 @app.post('/api/hall')
 def hall():
     p=project(); d=request.get_json(force=True)
-    for k in ('name','stage_label'):
+    for k in ('name','stage_label','seating_type'):
         if k in d: p['hall'][k]=str(d[k]).strip()
     touch(p); return state()
 
@@ -124,7 +124,7 @@ def add_table():
     p=project(); d=request.get_json(force=True)
     t={'id':uid('t'),'name':(d.get('name') or f"שולחן {len(p['tables'])+1}").strip(),
        'x':float(d.get('x',50)),'y':float(d.get('y',50)),'capacity':max(1,int(d.get('capacity',4))),
-       'rank':float(d.get('rank',10)),'custom_rank':True,'locked':False}
+       'rank':float(d.get('rank',10)),'custom_rank':True,'locked':False,'kind':d.get('kind','table'),'shape':d.get('shape','round')}
     p['tables'].append(t); touch(p); return state()
 @app.patch('/api/tables/<tid>')
 def edit_table(tid):
@@ -132,6 +132,8 @@ def edit_table(tid):
     if not t:return jsonify(error='table not found'),404
     d=request.get_json(force=True)
     if 'name' in d:t['name']=str(d['name']).strip()
+    for k in ('kind','shape'):
+        if k in d:t[k]=str(d[k])
     for k in ('x','y','rank'):
         if k in d:t[k]=float(d[k])
     if 'capacity' in d:
@@ -147,6 +149,38 @@ def delete_table(tid):
         if x.get('locked'): return jsonify(error='יש בשולחן אדם נעול. בטל נעילה לפני מחיקה'),400
         x['table_id']=None;x['seat']=None
     p['tables']=[t for t in p['tables'] if t['id']!=tid]; p['rules']=[r for r in p['rules'] if r.get('table_id')!=tid]
+    touch(p); return state()
+
+@app.post('/api/layout/clear')
+def clear_layout():
+    p=project()
+    if any(x.get('locked') and x.get('table_id') for x in p['people']):
+        return jsonify(error='יש אנשים נעולים במקומם. בטל נעילות לפני ניקוי האולם'),400
+    for x in p['people']:
+        x['table_id']=None; x['seat']=None
+    p['tables']=[]; p['rules']=[r for r in p['rules'] if not r.get('table_id')]
+    touch(p); return state()
+
+@app.post('/api/layout/generate')
+def generate_layout():
+    p=project(); d=request.get_json(force=True)
+    mode=d.get('mode','rows'); rows=max(1,min(30,int(d.get('rows',5)))); cols=max(1,min(30,int(d.get('cols',8))))
+    cap=max(1,min(30,int(d.get('capacity',4))))
+    if any(x.get('locked') and x.get('table_id') for x in p['people']):
+        return jsonify(error='יש אנשים נעולים במקומם. בטל נעילות לפני החלפת המבנה'),400
+    for x in p['people']: x['table_id']=None; x['seat']=None
+    p['tables']=[]
+    if mode=='rows':
+        p['hall']['seating_type']='rows'
+        for r in range(rows):
+            for col in range(cols):
+                p['tables'].append({'id':uid('t'),'name':f'שורה {r+1} · כיסא {col+1}','x':7+(86*(col/(max(1,cols-1)))),'y':10+(82*(r/(max(1,rows-1)))),'capacity':1,'rank':round(1+r+abs(col-(cols-1)/2)*.08,2),'custom_rank':False,'locked':False,'kind':'seat','shape':'chair'})
+    else:
+        p['hall']['seating_type']='square_tables' if mode=='square' else 'round_tables'
+        shape='square' if mode=='square' else 'round'
+        for r in range(rows):
+            for col in range(cols):
+                p['tables'].append({'id':uid('t'),'name':f'שולחן {r*cols+col+1}','x':8+(84*(col/(max(1,cols-1)))),'y':12+(78*(r/(max(1,rows-1)))),'capacity':cap,'rank':round(1+r+abs(col-(cols-1)/2)*.3,2),'custom_rank':False,'locked':False,'kind':'table','shape':shape})
     touch(p); return state()
 
 @app.post('/api/groups')
