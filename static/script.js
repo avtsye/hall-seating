@@ -17,7 +17,7 @@ function mergedObjectPath(objects){
  for(const key of cells){let [x,y]=key.split(',').map(Number);if(!has(x,y-1))edges.push([[x,y],[x+1,y]]);if(!has(x+1,y))edges.push([[x+1,y],[x+1,y+1]]);if(!has(x,y+1))edges.push([[x+1,y+1],[x,y+1]]);if(!has(x-1,y))edges.push([[x,y+1],[x,y]])}
  const byStart=new Map();edges.forEach(e=>{let k=e[0].join(',');if(!byStart.has(k))byStart.set(k,[]);byStart.get(k).push(e)});
  let d='',remaining=new Set(edges);
- while(remaining.size){let cur=remaining.values().next().value,start=cur[0],pts=[start];remaining.delete(cur);while(true){pts.push(cur[1]);if(cur[1][0]===start[0]&&cur[1][1]===start[1])break;let next=(byStart.get(cur[1].join(','))||[]).find(e=>remaining.has(e));if(!next)break;cur=next;remaining.delete(cur)}if(pts.length>2)d+='M'+pts.map(p=>(p[0]*CELL)+','+(p[1]*CELL)).join('L')+'Z'}
+ while(remaining.size){let cur=remaining.values().next().value,start=cur[0],pts=[start];remaining.delete(cur);while(true){pts.push(cur[1]);if(cur[1][0]===start[0]&&cur[1][1]===start[1])break;let next=(byStart.get(cur[1].join(','))||[]).find(e=>remaining.has(e));if(!next)break;cur=next;remaining.delete(cur)}if(pts.length>2)d+='M'+pts.map(p=>((GRID_COLS-p[0])*CELL)+','+(p[1]*CELL)).join('L')+'Z'}
  return d
 }
 function renderMergedHallObjects(container){
