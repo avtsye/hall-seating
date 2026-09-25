@@ -209,6 +209,7 @@ def draw_layout_item():
            'rotation':0,'w':w,'h':h,'gx':gx,'gy':gy,'gw':gw,'gh':gh,'zone':'','tags':[],'disabled':False}
         p['tables'].append(t);created.append(t['id'])
     elif kind=='seat':
+        # Like the room editor's swept corridor: every covered grid square becomes one cell.
         for rr in range(gh):
             for cc in range(gw):
                 seat_cell(gx+cc,gy+rr,f'כיסא {len([q for q in p["tables"] if q.get("kind")=="seat"])+1}')
