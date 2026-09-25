@@ -18,7 +18,7 @@ def new_project(name='אולם חדש'):
                            'rank':round(1+r*1.0+abs(c-2.5)*.35,2),'custom_rank':False,'locked':False,'kind':'table','shape':'round'})
     return {'id':uid('p'),'name':name,'created':now(),'modified':now(),
             'hall':{'name':'האולם','stage_label':'חזית / במה','width':100,'height':100,'seating_type':'round_tables'},
-            'tables':tables,'hall_objects':[],'groups':[], 'people':[], 'rules':[], 'snapshots':[]}
+            'tables':tables,'hall_objects':[],'settings':{'seat_preference':'front_center','front_weight':1.0,'center_weight':0.35},'groups':[], 'people':[], 'rules':[], 'snapshots':[]}
 
 def default_state():
     p=new_project('השיבוץ הראשון')
@@ -70,8 +70,19 @@ def violations(p):
         if bad: out.append({'rule_id':rule['id'],'level':rule.get('level','soft'),'message':msg})
     return out
 
+def effective_rank(p,t):
+    if t.get('custom_rank'): return float(t.get('rank',10))
+    s=p.get('settings',{}); mode=s.get('seat_preference','front_center')
+    fw=float(s.get('front_weight',1.0)); cw=float(s.get('center_weight',0.35))
+    front=max(0.0,min(100.0,float(t.get('y',50))))/10.0
+    center=abs(max(0.0,min(100.0,float(t.get('x',50))))-50.0)/5.0
+    if mode=='front_only': return front
+    if mode=='center_only': return center
+    if mode=='manual': return float(t.get('rank',10))
+    return front*fw + center*cw
+
 def score_candidate(p,person,t,group_priority):
-    score=float(t.get('rank',999))*10 + group_priority*2
+    score=effective_rank(p,t)*10 + group_priority*2
     same=sum(1 for x in occupants(p,t['id']) if x.get('group_id')==person.get('group_id'))
     other=len(occupants(p,t['id']))-same
     score-=same*9; score+=other*2
@@ -117,6 +128,17 @@ def del_project(pid):
 def project_name():
     p=project(); p['name']=(request.get_json(force=True).get('name') or p['name']).strip(); touch(p); return state()
 
+@app.post('/api/project/settings')
+def project_settings():
+    p=project(); d=request.get_json(force=True); s=p.setdefault('settings',{})
+    mode=d.get('seat_preference',s.get('seat_preference','front_center'))
+    if mode not in ('front_center','front_only','center_only','manual'):return jsonify(error='העדפת מקום לא תקינה'),400
+    s['seat_preference']=mode
+    for k,default in (('front_weight',1.0),('center_weight',0.35)):
+        if k in d:s[k]=max(0.0,min(10.0,float(d[k])))
+        else:s.setdefault(k,default)
+    touch(p);return state()
+
 @app.post('/api/hall')
 def hall():
     p=project(); d=request.get_json(force=True)
@@ -129,7 +151,7 @@ def add_table():
     p=project(); d=request.get_json(force=True)
     t={'id':uid('t'),'name':(d.get('name') or f"שולחן {len(p['tables'])+1}").strip(),
        'x':float(d.get('x',50)),'y':float(d.get('y',50)),'capacity':max(1,int(d.get('capacity',4))),
-       'rank':float(d.get('rank',10)),'custom_rank':True,'locked':False,'kind':d.get('kind','table'),'shape':d.get('shape','round'),'rotation':float(d.get('rotation',0)),'w':float(d.get('w',0)),'h':float(d.get('h',0))}
+       'rank':float(d.get('rank',10)),'custom_rank':bool(d.get('custom_rank',False)),'locked':False,'kind':d.get('kind','table'),'shape':d.get('shape','round'),'rotation':float(d.get('rotation',0)),'w':float(d.get('w',0)),'h':float(d.get('h',0))}
     p['tables'].append(t); touch(p); return state()
 @app.patch('/api/tables/<tid>')
 def edit_table(tid):
@@ -146,6 +168,7 @@ def edit_table(tid):
         if len(occ)>cap:return jsonify(error='יש יותר משובצים מהקיבולת החדשה'),400
         t['capacity']=cap
     if 'locked' in d:t['locked']=bool(d['locked'])
+    if 'custom_rank' in d:t['custom_rank']=bool(d['custom_rank'])
     touch(p); return state()
 @app.delete('/api/tables/<tid>')
 def delete_table(tid):
@@ -262,7 +285,7 @@ def add_bench():
     for i in range(count):
         sx=max(2,min(98,x+(i-start)*dx));sy=max(3,min(97,y+(i-start)*dy))
         t={'id':uid('t'),'name':f'ספסל {bench_id[-4:]} · מקום {i+1}','x':sx,'y':sy,'capacity':1,
-           'rank':float(d.get('rank',max(1,round(y/10,1)))),'custom_rank':True,'locked':False,'kind':'seat','shape':'chair',
+           'rank':float(d.get('rank',max(1,round(y/10,1)))),'custom_rank':False,'locked':False,'kind':'seat','shape':'chair',
            'rotation':rotation,'w':0,'h':0,'bench_id':bench_id,'bench_index':i+1}
         p['tables'].append(t);created.append(t['id'])
     touch(p);return jsonify(created=created,**state().get_json())
@@ -418,7 +441,7 @@ def export_csv():
     p=project(); out=io.StringIO();out.write('\ufeff');w=csv.writer(out);w.writerow(['שם','קבוצה','שולחן','מקום','דירוג','נעול'])
     gm={g['id']:g['name'] for g in p['groups']};tm={t['id']:t for t in p['tables']}
     for x in sorted(p['people'],key=lambda x:(tm.get(x.get('table_id'),{}).get('rank',99999),x.get('seat') or 0,x['name'])):
-        t=tm.get(x.get('table_id'));w.writerow([x['name'],gm.get(x.get('group_id'),''),t['name'] if t else '',(x.get('seat')+1) if x.get('seat') is not None else '',t['rank'] if t else '', 'כן' if x.get('locked') else ''])
+        t=tm.get(x.get('table_id'));w.writerow([x['name'],gm.get(x.get('group_id'),''),t['name'] if t else '',(x.get('seat')+1) if x.get('seat') is not None else '',round(effective_rank(p,t),2) if t else '', 'כן' if x.get('locked') else ''])
     r=Response(out.getvalue(),mimetype='text/csv; charset=utf-8');r.headers['Content-Disposition']='attachment; filename=hall-seating.csv';return r
 @app.get('/api/backup')
 def backup():
