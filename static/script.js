@@ -98,7 +98,7 @@ function iconClass(t){if(t.bench_id)return'bench';if(t.kind==='seat')return'chai
 function tableSeatDots(t){if(t.kind==='seat')return'';return '<span class="table-seat-ring"></span>'}
 async function applyRect(a,b){
  let area=gridArea(a,b);
- if(builderTool==='erase'){let hits=allItems().filter(q=>cellsClash(q.r,area));if(!hits.length)return;remember();for(const q of hits){if(q.type==='table')await api('/api/tables/'+q.id,{method:'DELETE'});else await api('/api/hall-objects/'+q.id,{method:'DELETE'})}await load();return}
+ if(builderTool==='erase'){let hits=allItems().filter(q=>cellsClash(q.r,area));if(!hits.length)return;remember();let d=await api('/api/layout/erase',json('POST',area));use(d);return}
  remember();let d=await api('/api/layout/draw',json('POST',{kind:builderTool,...area,capacity:+$('#genCapacity').value||4}));S=d.state;P=d.project;V=d.violations||[];builderSelected=new Set((d.created||[]).filter(id=>P.tables.some(t=>t.id===id)));render()
 }
 function renderBuilderGeometryOnly(){let canvas=$('#builderCanvas');if(!canvas||!P)return;canvas.style.setProperty('--grid-cell',CELL+'px');canvas.style.setProperty('width',(GRID_COLS*CELL)+'px','important');canvas.style.setProperty('height',(GRID_ROWS*CELL)+'px','important');canvas.style.setProperty('min-width',(GRID_COLS*CELL)+'px','important');canvas.style.setProperty('min-height',(GRID_ROWS*CELL)+'px','important');canvas.querySelectorAll('.builder-item').forEach(el=>{let t=P.tables.find(x=>x.id===el.dataset.bid);if(t)gridStyle(el,gridRect(t))});renderMergedHallObjects(canvas)}
