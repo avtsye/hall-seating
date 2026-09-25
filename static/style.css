@@ -218,3 +218,22 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
 .dark .merged-zone{fill:#173b55;stroke:#4f8bb8}
 #builderCanvas .merged-hall-objects{z-index:1}
 #builderCanvas .builder-item{z-index:3!important}
+
+/* Compact grid-native assignment/display cards — one cell means one visual cell. */
+#assignCanvas.unified-hall-map .assign-slot{
+  box-sizing:border-box!important;margin:0!important;transform:none!important;
+  min-width:0!important;min-height:0!important;padding:1px 2px!important;
+  border-width:1px!important;border-radius:5px!important;box-shadow:none!important;
+  display:grid!important;grid-template-columns:12px minmax(0,1fr)!important;
+  grid-template-rows:auto 1fr!important;gap:0 2px!important;
+  align-content:center!important;justify-content:stretch!important;text-align:center!important;
+  overflow:visible!important;background:var(--card)!important;
+}
+#assignCanvas .assign-compact-icon{grid-row:1;grid-column:1;font-size:10px;line-height:11px;color:var(--accent);overflow:hidden}
+#assignCanvas .assign-compact-name{grid-row:1;grid-column:2;font-size:9px;line-height:10px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#assignCanvas .assign-compact-occ{grid-row:2;grid-column:1/-1;font-size:9px;line-height:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#assignCanvas .assign-slot:hover{z-index:20!important;overflow:visible!important;outline:2px solid var(--accent);outline-offset:1px}
+#assignCanvas .seat-tooltip{z-index:50}
+#displayCanvas .display-seat{padding:1px!important;border-width:1px!important;border-radius:4px!important;justify-content:center!important;overflow:hidden!important}
+#displayCanvas .display-number{font-size:9px!important;line-height:10px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+#displayCanvas .display-person{font-size:8px!important;line-height:9px!important;margin-top:1px!important;white-space:nowrap;overflow:hidden!important;text-overflow:ellipsis;max-width:100%}
