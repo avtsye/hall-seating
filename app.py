@@ -18,7 +18,7 @@ def new_project(name='אולם חדש'):
                            'rank':round(1+r*1.0+abs(c-2.5)*.35,2),'custom_rank':False,'locked':False,'kind':'table','shape':'round'})
     return {'id':uid('p'),'name':name,'created':now(),'modified':now(),
             'hall':{'name':'האולם','stage_label':'חזית / במה','width':100,'height':100,'seating_type':'round_tables'},
-            'tables':tables,'groups':[], 'people':[], 'rules':[], 'snapshots':[]}
+            'tables':tables,'hall_objects':[],'groups':[], 'people':[], 'rules':[], 'snapshots':[]}
 
 def default_state():
     p=new_project('השיבוץ הראשון')
@@ -77,16 +77,21 @@ def score_candidate(p,person,t,group_priority):
     score-=same*9; score+=other*2
     for r in p['rules']:
         if person['id'] not in r.get('people',[]): continue
-        penalty=100000 if r.get('level')=='hard' else 180; typ=r.get('type')
-        if typ=='at_table' and t['id']!=r.get('table_id'): score+=penalty
-        elif typ=='not_table' and t['id']==r.get('table_id'): score+=penalty
+        hard=r.get('level')=='hard'; penalty=180; typ=r.get('type'); violates=False
+        if typ=='at_table':
+            violates=t['id']!=r.get('table_id')
+        elif typ=='not_table':
+            violates=t['id']==r.get('table_id')
         elif typ=='together':
             mates=[person_by_id(p,i) for i in r.get('people',[]) if i!=person['id']]
             seated=[m for m in mates if m and m.get('table_id')]
-            if seated and any(m['table_id']!=t['id'] for m in seated): score+=penalty
+            violates=bool(seated and any(m['table_id']!=t['id'] for m in seated))
         elif typ=='separate':
             mates=set(r.get('people',[]))-{person['id']}
-            if any(o['id'] in mates for o in occupants(p,t['id'])): score+=penalty
+            violates=any(o['id'] in mates for o in occupants(p,t['id']))
+        if violates:
+            if hard:return None
+            score+=penalty
     return score
 
 @app.get('/')
@@ -170,18 +175,18 @@ def generate_layout():
     if any(x.get('locked') and x.get('table_id') for x in p['people']):
         return jsonify(error='יש אנשים נעולים במקומם. בטל נעילות לפני החלפת המבנה'),400
     for x in p['people']: x['table_id']=None; x['seat']=None
-    p['tables']=[]
+    p['tables']=[]; p['rules']=[r for r in p['rules'] if not r.get('table_id')]
     if mode=='rows':
         p['hall']['seating_type']='rows'
         for r in range(rows):
             for col in range(cols):
-                p['tables'].append({'id':uid('t'),'name':f'שורה {r+1} · כיסא {col+1}','x':7+(86*(col/(max(1,cols-1)))),'y':10+(82*(r/(max(1,rows-1)))),'capacity':1,'rank':round(1+r+abs(col-(cols-1)/2)*.08,2),'custom_rank':False,'locked':False,'kind':'seat','shape':'chair'})
+                p['tables'].append({'id':uid('t'),'name':f'שורה {r+1} · כיסא {col+1}','x':7+(86*(col/(max(1,cols-1)))),'y':10+(82*(r/(max(1,rows-1)))),'capacity':1,'rank':round(1+r+abs(col-(cols-1)/2)*.08,2),'custom_rank':False,'locked':False,'kind':'seat','shape':'chair','rotation':0,'w':0,'h':0})
     else:
         p['hall']['seating_type']='square_tables' if mode=='square' else 'round_tables'
         shape='square' if mode=='square' else 'round'
         for r in range(rows):
             for col in range(cols):
-                p['tables'].append({'id':uid('t'),'name':f'שולחן {r*cols+col+1}','x':8+(84*(col/(max(1,cols-1)))),'y':12+(78*(r/(max(1,rows-1)))),'capacity':cap,'rank':round(1+r+abs(col-(cols-1)/2)*.3,2),'custom_rank':False,'locked':False,'kind':'table','shape':shape})
+                p['tables'].append({'id':uid('t'),'name':f'שולחן {r*cols+col+1}','x':8+(84*(col/(max(1,cols-1)))),'y':12+(78*(r/(max(1,rows-1)))),'capacity':cap,'rank':round(1+r+abs(col-(cols-1)/2)*.3,2),'custom_rank':False,'locked':False,'kind':'table','shape':shape,'rotation':0,'w':0,'h':0})
     touch(p); return state()
 
 @app.post('/api/tables/bulk')
@@ -234,6 +239,16 @@ def restore_layout():
         if x.get('table_id') not in valid:x['table_id']=None;x['seat']=None
     p['tables']=copy.deepcopy(tables)
     if 'hall_objects' in d:p['hall_objects']=copy.deepcopy(d.get('hall_objects') or [])
+    assignments=d.get('assignments')
+    if isinstance(assignments,list):
+        amap={a.get('id'):a for a in assignments}
+        valid={t.get('id') for t in p['tables']}
+        for x in p['people']:
+            a=amap.get(x['id'])
+            if a:
+                tid=a.get('table_id')
+                x['table_id']=tid if tid in valid else None
+                x['seat']=a.get('seat') if tid in valid else None
     touch(p);return state()
 
 @app.post('/api/benches')
@@ -369,7 +384,9 @@ def assign():
         candidates=[]
         for t in p['tables']:
             if t.get('locked') or free_seat(p,t) is None:continue
-            candidates.append((score_candidate(p,x,t,gp.get(x.get('group_id'),999)),t))
+            score=score_candidate(p,x,t,gp.get(x.get('group_id'),999))
+            if score is None:continue
+            candidates.append((score,t))
         if not candidates:un.append(x['name']);continue
         candidates.sort(key=lambda z:z[0]); t=candidates[0][1]; x['table_id']=t['id'];x['seat']=free_seat(p,t)
     touch(p);return jsonify(unseated=un,**state().get_json())
@@ -384,13 +401,16 @@ def reset():
 def snapshot():
     p=project(); d=request.get_json(force=True)
     snap={'id':uid('s'),'name':(d.get('name') or f"גרסה {len(p['snapshots'])+1}").strip(),'created':now(),
-          'people':copy.deepcopy(p['people']),'tables':copy.deepcopy(p['tables']),'groups':copy.deepcopy(p['groups']),'rules':copy.deepcopy(p['rules'])}
+          'people':copy.deepcopy(p['people']),'tables':copy.deepcopy(p['tables']),'hall':copy.deepcopy(p['hall']),'hall_objects':copy.deepcopy(p.get('hall_objects',[])),'groups':copy.deepcopy(p['groups']),'rules':copy.deepcopy(p['rules'])}
     p['snapshots'].append(snap);touch(p);return state()
 @app.post('/api/snapshots/<sid>/restore')
 def restore_snapshot(sid):
     p=project();s=next((s for s in p['snapshots'] if s['id']==sid),None)
     if not s:return jsonify(error='snapshot not found'),404
-    for k in ('people','tables','groups','rules'):p[k]=copy.deepcopy(s[k])
+    for k in ('people','tables','groups','rules'):
+        p[k]=copy.deepcopy(s[k])
+    if 'hall' in s:p['hall']=copy.deepcopy(s['hall'])
+    if 'hall_objects' in s:p['hall_objects']=copy.deepcopy(s['hall_objects'])
     touch(p);return state()
 
 @app.get('/api/export')
