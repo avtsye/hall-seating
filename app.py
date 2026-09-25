@@ -226,10 +226,16 @@ def draw_layout_item():
         for i in range(count):
             seat_cell(gx+i if horizontal else fixed_x,fixed_y if horizontal else gy+i,f'ספסל {bid[-4:]} · מקום {i+1}',bid,i+1)
     elif kind in ('stage','aisle','zone'):
-        names={'stage':'במה','aisle':'מעבר','zone':'אזור'}
-        o={'id':uid('o'),'kind':kind,'name':names[kind],'x':x,'y':y,'w':w,'h':h,'rotation':0,
-           'gx':gx,'gy':gy,'gw':gw,'gh':gh}
-        p.setdefault('hall_objects',[]).append(o);created.append(o['id'])
+        # Architectural areas are stored as grid cells, like the room-assignment editor.
+        # The client traces their union, so adjacent cells become one continuous shape.
+        names={'stage':'במה','aisle':'מעבר','zone':'אזור'}; objs=p.setdefault('hall_objects',[])
+        occupied={(int(o.get('gx',-1)),int(o.get('gy',-1)),o.get('kind')) for o in objs if int(o.get('gw',1))==1 and int(o.get('gh',1))==1}
+        for cy in range(gy,gy+gh):
+            for cx in range(gx,gx+gw):
+                if (cx,cy,kind) in occupied: continue
+                o={'id':uid('o'),'kind':kind,'name':names[kind],'x':(cx+.5)/cols*100,'y':(cy+.5)/rows*100,
+                   'w':100/cols,'h':100/rows,'rotation':0,'gx':cx,'gy':cy,'gw':1,'gh':1}
+                objs.append(o);created.append(o['id'])
     else:return jsonify(error='סוג שרטוט לא מוכר'),400
     touch(p);return jsonify(created=created,**state().get_json())
 
@@ -269,6 +275,34 @@ def delete_table(tid):
         x['table_id']=None;x['seat']=None
     p['tables']=[t for t in p['tables'] if t['id']!=tid]; p['rules']=[r for r in p['rules'] if r.get('table_id')!=tid]
     touch(p); return state()
+
+@app.post('/api/layout/erase')
+def erase_layout_area():
+    p=project();d=request.get_json(force=True)
+    ex=int(d.get('gx',0));ey=int(d.get('gy',0));ew=max(1,int(d.get('gw',1)));eh=max(1,int(d.get('gh',1)))
+    def hit(x,y,w,h): return not (x+w<=ex or ex+ew<=x or y+h<=ey or ey+eh<=y)
+    # Seating items are atomic: touching one removes that item, as before.
+    removed={t['id'] for t in p.get('tables',[]) if hit(int(t.get('gx',0)),int(t.get('gy',0)),int(t.get('gw',1)),int(t.get('gh',1)))}
+    if removed:
+        for person in p.get('people',[]):
+            if person.get('table_id') in removed:
+                if person.get('locked'): return jsonify(error='יש במקום שנמחק אדם נעול. בטל נעילה לפני מחיקה'),400
+                person['table_id']=None;person['seat']=None
+        p['tables']=[t for t in p.get('tables',[]) if t['id'] not in removed]
+        p['rules']=[r for r in p.get('rules',[]) if r.get('table_id') not in removed]
+    # Architectural rectangles are rasterized to cells and only the selected cells are erased.
+    cols=max(5,int(p.get('settings',{}).get('grid_cols',26)));rows=max(5,int(p.get('settings',{}).get('grid_rows',16)))
+    names={'stage':'במה','aisle':'מעבר','zone':'אזור'}; kept=[]
+    for o in p.get('hall_objects',[]):
+        ox=int(o.get('gx',0));oy=int(o.get('gy',0));ow=max(1,int(o.get('gw',1)));oh=max(1,int(o.get('gh',1)))
+        for cy in range(oy,oy+oh):
+            for cx in range(ox,ox+ow):
+                if ex<=cx<ex+ew and ey<=cy<ey+eh: continue
+                no={'id':uid('o'),'kind':o.get('kind','zone'),'name':o.get('name') or names.get(o.get('kind'),'אזור'),
+                    'x':(cx+.5)/cols*100,'y':(cy+.5)/rows*100,'w':100/cols,'h':100/rows,'rotation':0,
+                    'gx':cx,'gy':cy,'gw':1,'gh':1}
+                kept.append(no)
+    p['hall_objects']=kept;touch(p);return state()
 
 @app.post('/api/layout/clear')
 def clear_layout():
