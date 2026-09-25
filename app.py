@@ -466,20 +466,40 @@ def delete_person(pid):
 def upload_people():
     p=project(); f=request.files.get('file')
     if not f:return jsonify(error='לא נבחר קובץ'),400
-    raw=f.read().decode('utf-8-sig'); rows=list(csv.reader(io.StringIO(raw))); added=0
-    for row in rows:
-        if not row:continue
-        name=row[0].strip(); gname=row[1].strip() if len(row)>1 else ''
-        if name.lower() in ('name','שם'):continue
-        if not name or any(x['name']==name for x in p['people']):continue
+    data=f.read()
+    if not data:return jsonify(error='קובץ ה-CSV ריק'),400
+    raw=None; used_encoding=None
+    for enc in ('utf-8-sig','utf-8','cp1255','utf-16'):
+        try: raw=data.decode(enc); used_encoding=enc; break
+        except UnicodeDecodeError: pass
+    if raw is None:return jsonify(error='לא הצלחתי לקרוא את קידוד קובץ ה-CSV'),400
+    try:
+        sample=raw[:4096]
+        try: dialect=csv.Sniffer().sniff(sample,delimiters=',;\t')
+        except csv.Error: dialect=csv.excel
+        rows=list(csv.reader(io.StringIO(raw),dialect))
+    except Exception as e:
+        return jsonify(error='מבנה CSV לא תקין',details=str(e)),400
+    added=0; skipped=0; created_groups=0
+    headers={'name','full name','שם','שם מלא','שם המוזמן','מוזמן','שם אורח'}
+    group_headers={'group','קבוצה','קבוצות','שיעור','אברכים'}
+    existing={str(x.get('name','')).strip() for x in p['people']}
+    for index,row in enumerate(rows,1):
+        if not row or not any(str(v).strip() for v in row):continue
+        name=str(row[0]).strip().lstrip('\ufeff'); gname=str(row[1]).strip() if len(row)>1 else ''
+        if index==1 and (name.lower() in headers or gname.lower() in group_headers):
+            continue
+        if not name or name in existing: skipped+=1; continue
         gid=None
         if gname:
-            g=next((g for g in p['groups'] if g['name']==gname),None)
+            g=next((g for g in p['groups'] if str(g.get('name','')).strip()==gname),None)
             if not g:
-                g={'id':uid('g'),'name':gname,'priority':len(p['groups'])+1};p['groups'].append(g)
+                g={'id':uid('g'),'name':gname,'priority':len(p['groups'])+1};p['groups'].append(g);created_groups+=1
             gid=g['id']
-        p['people'].append({'id':uid('u'),'name':name,'group_id':gid,'table_id':None,'seat':None,'locked':False,'note':'','preferred_zone':'','preferred_tags':[],'seat_preference':'project'});added+=1
-    touch(p); return jsonify(added=added,**state().get_json())
+        p['people'].append({'id':uid('u'),'name':name,'group_id':gid,'table_id':None,'seat':None,'locked':False,'note':'','preferred_zone':'','preferred_tags':[],'seat_preference':'project'})
+        existing.add(name);added+=1
+    touch(p)
+    return jsonify(added=added,skipped=skipped,created_groups=created_groups,rows=len(rows),encoding=used_encoding,**state().get_json())
 
 @app.post('/api/seat')
 def seat():
