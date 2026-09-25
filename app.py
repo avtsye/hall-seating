@@ -159,6 +159,7 @@ def clear_layout():
     for x in p['people']:
         x['table_id']=None; x['seat']=None
     p['tables']=[]; p['rules']=[r for r in p['rules'] if not r.get('table_id')]
+    p['hall_objects']=[]
     touch(p); return state()
 
 @app.post('/api/layout/generate')
@@ -222,6 +223,53 @@ def bulk_tables():
         for t in items:t['rotation']=(float(t.get('rotation',0))+deg)%360
     else:return jsonify(error='פעולה לא מוכרת'),400
     touch(p);return state()
+
+@app.post('/api/layout/restore')
+def restore_layout():
+    p=project(); d=request.get_json(force=True)
+    tables=d.get('tables')
+    if not isinstance(tables,list):return jsonify(error='מצב שחזור לא תקין'),400
+    valid={t.get('id') for t in tables}
+    for x in p['people']:
+        if x.get('table_id') not in valid:x['table_id']=None;x['seat']=None
+    p['tables']=copy.deepcopy(tables)
+    if 'hall_objects' in d:p['hall_objects']=copy.deepcopy(d.get('hall_objects') or [])
+    touch(p);return state()
+
+@app.post('/api/benches')
+def add_bench():
+    p=project(); d=request.get_json(force=True); count=max(2,min(30,int(d.get('count',5))))
+    x=float(d.get('x',50));y=float(d.get('y',50));spacing=float(d.get('spacing',3.2));rotation=float(d.get('rotation',0))
+    bench_id=uid('bench'); created=[]
+    import math
+    rad=math.radians(rotation); dx=math.cos(rad)*spacing;dy=math.sin(rad)*spacing
+    start=(count-1)/2
+    for i in range(count):
+        sx=max(2,min(98,x+(i-start)*dx));sy=max(3,min(97,y+(i-start)*dy))
+        t={'id':uid('t'),'name':f'ספסל {bench_id[-4:]} · מקום {i+1}','x':sx,'y':sy,'capacity':1,
+           'rank':float(d.get('rank',max(1,round(y/10,1)))),'custom_rank':True,'locked':False,'kind':'seat','shape':'chair',
+           'rotation':rotation,'w':0,'h':0,'bench_id':bench_id,'bench_index':i+1}
+        p['tables'].append(t);created.append(t['id'])
+    touch(p);return jsonify(created=created,**state().get_json())
+
+@app.post('/api/hall-objects')
+def add_hall_object():
+    p=project();d=request.get_json(force=True);p.setdefault('hall_objects',[])
+    o={'id':uid('o'),'kind':d.get('kind','zone'),'name':str(d.get('name') or 'אובייקט'),'x':float(d.get('x',50)),'y':float(d.get('y',50)),
+       'w':float(d.get('w',20)),'h':float(d.get('h',8)),'rotation':float(d.get('rotation',0))}
+    p['hall_objects'].append(o);touch(p);return state()
+@app.patch('/api/hall-objects/<oid>')
+def edit_hall_object(oid):
+    p=project();o=next((o for o in p.setdefault('hall_objects',[]) if o['id']==oid),None)
+    if not o:return jsonify(error='object not found'),404
+    d=request.get_json(force=True)
+    if 'name' in d:o['name']=str(d['name'])
+    for k in ('x','y','w','h','rotation'):
+        if k in d:o[k]=float(d[k])
+    touch(p);return state()
+@app.delete('/api/hall-objects/<oid>')
+def delete_hall_object(oid):
+    p=project();p['hall_objects']=[o for o in p.setdefault('hall_objects',[]) if o['id']!=oid];touch(p);return state()
 
 @app.post('/api/groups')
 def add_group():
