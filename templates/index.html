@@ -7,7 +7,7 @@
 <div class="roomlike-builder">
   <div class="builder-intro"><div><span class="eyebrow">אשף בניית אולם</span><h2>בניית מפת האולם</h2><p>בחרו כלי, מקמו אותו על הרשת וערכו את מבנה האולם בצורה חזותית.</p></div><div class="builder-status"><span id="builderCount"></span><b id="builderHallName">האולם</b></div></div>
   <div class="roomlike-toolbar">
-    <button class="room-tool selected" data-tool="select"><b>↖</b><span>בחירה</span></button>
+    <button class="room-tool selected" data-tool="select"><b>↖</b><span>בחירה</span></button><button class="room-tool hall-draw-tool" data-tool="hallshape"><b>✎</b><span>שרטוט האולם</span></button><button class="room-tool hall-draw-tool" data-tool="hallerase"><b>⌫</b><span>מחיקת שרטוט</span></button>
     <button class="room-tool" data-tool="seat"><b>♙</b><span>כיסא</span></button>
     <button class="room-tool" data-tool="bench"><b>▥</b><span>ספסל</span></button>
     <button class="room-tool" data-tool="square"><b>▣</b><span>שולחן מרובע</span></button>
@@ -32,9 +32,9 @@
       <div class="quick-template"><b>תבנית מהירה</b><button class="layout-card selected" data-layout="round_tables">● עגולים</button><button class="layout-card" data-layout="square_tables">▣ מרובעים</button><button class="layout-card" data-layout="rows">♙ שורות</button><label>שורות <input id="genRows" type="number" value="5" min="1" max="30"></label><label>עמודות <input id="genCols" type="number" value="6" min="1" max="30"></label><label id="genCapWrap">מקומות <input id="genCapacity" type="number" value="4" min="1" max="30"></label><button class="btn primary" id="generateLayout">צור</button></div>
       <div class="hall-plan-frame">
         <div id="builderStage" class="plan-stage">חזית / במה</div>
-        <div id="builderCanvas" class="hall builder-canvas room-grid"><div id="selectionBox" class="selection-box"></div><div class="empty-help">בחרו כלי מסרגל הכלים ולחצו על הרשת כדי להתחיל</div></div>
+        <div id="builderCanvas" class="hall builder-canvas room-grid"><svg id="hallShapeSvg" class="hall-shape-svg" viewBox="0 0 60 40" preserveAspectRatio="none"><path id="hallShapePath"></path></svg><div id="hallDrawBand" class="hall-draw-band"></div><div id="selectionBox" class="selection-box"></div><div class="empty-help">בחרו כלי מסרגל הכלים ולחצו על הרשת כדי להתחיל</div></div>
       </div>
-      <div class="map-footer"><div class="room-legend"><b>מקרא:</b><span><i class="lg chair-lg">♙</i>כיסא</span><span><i class="lg bench-lg">▥</i>ספסל</span><span><i class="lg square-lg">▣</i>שולחן מרובע</span><span><i class="lg round-lg">●</i>שולחן עגול</span><span><i class="lg stage-lg">▰</i>במה</span><span><i class="lg aisle-lg">↕</i>מעבר</span><span><i class="lg zone-lg">▧</i>אזור</span></div><small>לחיצה כפולה על מקום פותחת הגדרות אישיות</small></div>
+      <div class="hall-draw-hint">✎ <b>שרטוט האולם:</b> בחרו "שרטוט האולם" וגררו מלבן על הרשת, או לחצו על פינה אחת ואז על הפינה הנגדית. אפשר לחבר כמה מלבנים לצורה חופשית, בדיוק כמו בתכנון חדרים.</div><div class="map-footer"><div class="room-legend"><b>מקרא:</b><span><i class="lg chair-lg">♙</i>כיסא</span><span><i class="lg bench-lg">▥</i>ספסל</span><span><i class="lg square-lg">▣</i>שולחן מרובע</span><span><i class="lg round-lg">●</i>שולחן עגול</span><span><i class="lg stage-lg">▰</i>במה</span><span><i class="lg aisle-lg">↕</i>מעבר</span><span><i class="lg zone-lg">▧</i>אזור</span></div><small>לחיצה כפולה על מקום פותחת הגדרות אישיות</small></div>
     </div>
   </div>
 </div>
