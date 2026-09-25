@@ -145,6 +145,8 @@ $('#tCustomRank')?.addEventListener('change',e=>{$('#tRank').disabled=!e.target.
 $('#projectSettingsBtn')?.addEventListener('click',()=>{let s=P.settings||{};$('#prefMode').value=s.seat_preference||'front_center';$('#frontWeight').value=s.front_weight??1;$('#centerWeight').value=s.center_weight??.35;$('#showQuality').checked=!!s.show_quality;$('#assignmentZoom').value=String(s.assignment_zoom??1);$('#projectSettingsDlg').showModal()});
 $('#saveProjectSettings')?.addEventListener('click',async()=>{let d=await api('/api/project/settings',json('POST',{seat_preference:$('#prefMode').value,front_weight:Number($('#frontWeight').value),center_weight:Number($('#centerWeight').value),show_quality:$('#showQuality').checked,assignment_zoom:Number($('#assignmentZoom').value)}));use(d);$('#projectSettingsDlg').close();toast('הגדרות הפרויקט נשמרו')});
 
+function seatIconClass(t){if(t?.bench_id)return'bench';if(t?.kind==='seat'||t?.shape==='chair')return'chair';return t?.shape==='square'?'square':'round'}
+function seatIcon(t){if(t?.bench_id)return'▥';if(t?.kind==='seat'||t?.shape==='chair')return'♙';return t?.shape==='square'?'▣':'●'}
 let assignmentZoom=1,qualityVisible=false;
 function qualityClass(t){let r=effectiveRankJS(t);return r<=3?'quality-best':r<=6?'quality-good':r<=9?'quality-mid':'quality-low'}
 function renderAssignmentPro(){
