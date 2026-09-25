@@ -190,16 +190,16 @@ def hall():
 @app.post('/api/layout/draw')
 def draw_layout_item():
     p=project();d=request.get_json(force=True);kind=d.get('kind')
-    # Geometry is stored on the same 60x40 logical grid used by the editor.
-    gx=max(0,min(59,int(d.get('gx',0)))); gy=max(0,min(39,int(d.get('gy',0))))
-    gw=max(1,min(60-gx,int(d.get('gw',1)))); gh=max(1,min(40-gy,int(d.get('gh',1))))
-    x=(gx+gw/2)/60*100; y=(gy+gh/2)/40*100; w=gw/60*100; h=gh/40*100
+    # Geometry is stored on the same 26x16 logical grid used by the editor.
+    gx=max(0,min(25,int(d.get('gx',0)))); gy=max(0,min(15,int(d.get('gy',0))))
+    gw=max(1,min(26-gx,int(d.get('gw',1)))); gh=max(1,min(16-gy,int(d.get('gh',1))))
+    x=(gx+gw/2)/26*100; y=(gy+gh/2)/16*100; w=gw/26*100; h=gh/16*100
     created=[]
     def seat_cell(cx,cy,name,bench_id=None,index=None):
-        px=(cx+.5)/60*100; py=(cy+.5)/40*100
+        px=(cx+.5)/26*100; py=(cy+.5)/16*100
         t={'id':uid('t'),'name':name,'x':px,'y':py,'capacity':1,'rank':max(1,round(py/10,1)),
            'custom_rank':False,'locked':False,'kind':'seat','shape':'chair','rotation':0,
-           'w':100/60,'h':100/40,'gx':cx,'gy':cy,'gw':1,'gh':1,'zone':'','tags':[],'disabled':False}
+           'w':100/26,'h':100/16,'gx':cx,'gy':cy,'gw':1,'gh':1,'zone':'','tags':[],'disabled':False}
         if bench_id:t['bench_id']=bench_id;t['bench_index']=index
         p['tables'].append(t);created.append(t['id'])
     if kind in ('round','square'):
@@ -312,8 +312,8 @@ def bulk_tables():
         for t in items:
             if t.get('gx') is not None:
                 gw=max(1,int(t.get('gw',1)));gh=max(1,int(t.get('gh',1)))
-                t['gx']=max(0,min(60-gw,int(t.get('gx',0))+gdx));t['gy']=max(0,min(40-gh,int(t.get('gy',0))+gdy))
-                t['x']=(t['gx']+gw/2)/60*100;t['y']=(t['gy']+gh/2)/40*100
+                t['gx']=max(0,min(26-gw,int(t.get('gx',0))+gdx));t['gy']=max(0,min(16-gh,int(t.get('gy',0))+gdy))
+                t['x']=(t['gx']+gw/2)/26*100;t['y']=(t['gy']+gh/2)/16*100
             else:
                 t['x']=max(1,min(99,float(t.get('x',50))+dx));t['y']=max(1,min(99,float(t.get('y',50))+dy))
     elif action=='align':
@@ -335,8 +335,8 @@ def bulk_tables():
         for t in items:
             n=copy.deepcopy(t);n['id']=uid('t');n['name']=str(t.get('name','פריט'))+' עותק';n['x']=min(98,t['x']+3);n['y']=min(97,t['y']+3)
             if n.get('gx') is not None:
-                n['gx']=min(60-int(n.get('gw',1)),int(n['gx'])+2);n['gy']=min(40-int(n.get('gh',1)),int(n['gy'])+2)
-                n['x']=(n['gx']+int(n.get('gw',1))/2)/60*100;n['y']=(n['gy']+int(n.get('gh',1))/2)/40*100
+                n['gx']=min(26-int(n.get('gw',1)),int(n['gx'])+2);n['gy']=min(16-int(n.get('gh',1)),int(n['gy'])+2)
+                n['x']=(n['gx']+int(n.get('gw',1))/2)/26*100;n['y']=(n['gy']+int(n.get('gh',1))/2)/16*100
             if n.get('bench_id'):n['bench_id']=uid('bench')
             new.append(n)
         p['tables'].extend(new)
@@ -393,7 +393,7 @@ def save_hall_shape():
             if not isinstance(q,dict):continue
             try:x=int(q.get('x'));y=int(q.get('y'))
             except (TypeError,ValueError):continue
-            if 0<=x<60 and 0<=y<40 and (x,y) not in seen:
+            if 0<=x<26 and 0<=y<16 and (x,y) not in seen:
                 seen.add((x,y));clean.append({'x':x,'y':y})
     p['hall_shape']=clean
     touch(p);return state()
@@ -415,8 +415,8 @@ def edit_hall_object(oid):
     for k in ('gx','gy','gw','gh'):
         if k in d:o[k]=int(d[k])
     if o.get('gx') is not None:
-        o['x']=(o['gx']+int(o.get('gw',1))/2)/60*100;o['y']=(o['gy']+int(o.get('gh',1))/2)/40*100
-        o['w']=int(o.get('gw',1))/60*100;o['h']=int(o.get('gh',1))/40*100
+        o['x']=(o['gx']+int(o.get('gw',1))/2)/26*100;o['y']=(o['gy']+int(o.get('gh',1))/2)/16*100
+        o['w']=int(o.get('gw',1))/26*100;o['h']=int(o.get('gh',1))/16*100
     touch(p);return state()
 @app.delete('/api/hall-objects/<oid>')
 def delete_hall_object(oid):
