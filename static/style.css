@@ -201,3 +201,8 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
 .grid-dimensions label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)}
 .grid-dimensions input{width:100%;box-sizing:border-box}
 .grid-dimensions .btn{grid-column:1/-1;padding:7px 9px}
+
+/* V13 — grid dimensions come from project state, never from legacy 26x16 CSS. */
+#builderCanvas.room-grid{
+  width:auto!important;height:auto!important;min-width:0!important;min-height:0!important;
+}
