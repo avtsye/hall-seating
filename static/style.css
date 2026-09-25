@@ -109,3 +109,26 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
 .grid-presets button{border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:6px 3px;font:inherit;font-size:11px;cursor:pointer}
 .grid-presets button.active{border-color:#1682e6;background:#e7f3ff;color:#0866b8;font-weight:800}
 .compact-hint{font-size:11px!important;margin:7px 0!important;line-height:1.45}
+
+/* Builder items: visual symbol never exceeds one grid cell */
+#builderCanvas .grid-item{
+  max-width:var(--grid-cell)!important;
+  max-height:var(--grid-cell)!important;
+}
+#builderCanvas .grid-item .item-symbol{
+  width:calc(var(--grid-cell) - 4px)!important;
+  height:calc(var(--grid-cell) - 4px)!important;
+  max-width:calc(var(--grid-cell) - 4px)!important;
+  max-height:calc(var(--grid-cell) - 4px)!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  box-sizing:border-box!important;
+  font-size:min(16px,calc(var(--grid-cell) * .55))!important;
+}
+#builderCanvas .grid-item.kind-round .item-symbol,
+#builderCanvas .grid-item.kind-square .item-symbol,
+#builderCanvas .grid-item.kind-chair .item-symbol,
+#builderCanvas .grid-item.kind-bench .item-symbol{
+  overflow:hidden!important;
+}
