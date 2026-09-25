@@ -196,3 +196,8 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
  body:has(#view-display.active) .top,body:has(#view-display.active) .steps,body:has(#view-display.active) .display-head .btn{display:none!important}
  body:has(#view-display.active) .display-scroll{border:0;padding:0;overflow:visible}
 }
+
+.grid-dimensions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px}
+.grid-dimensions label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)}
+.grid-dimensions input{width:100%;box-sizing:border-box}
+.grid-dimensions .btn{grid-column:1/-1;padding:7px 9px}
