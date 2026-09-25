@@ -18,7 +18,7 @@ def new_project(name='אולם חדש'):
                            'rank':round(1+r*1.0+abs(c-2.5)*.35,2),'custom_rank':False,'locked':False,'kind':'table','shape':'round'})
     return {'id':uid('p'),'name':name,'created':now(),'modified':now(),
             'hall':{'name':'האולם','stage_label':'חזית / במה','width':100,'height':100,'seating_type':'round_tables'},
-            'tables':tables,'hall_objects':[],'settings':{'seat_preference':'front_center','front_weight':1.0,'center_weight':0.35,'show_quality':False,'assignment_zoom':1.0},'groups':[], 'people':[], 'rules':[], 'snapshots':[]}
+            'tables':tables,'hall_objects':[],'settings':{'seat_preference':'front_center','front_weight':1.0,'center_weight':0.35,'show_quality':False,'assignment_zoom':1.0,'grid_cols':26,'grid_rows':16},'groups':[], 'people':[], 'rules':[], 'snapshots':[]}
 
 def default_state():
     p=new_project('השיבוץ הראשון')
@@ -148,6 +148,12 @@ def project_settings():
         else:s.setdefault(k,default)
     if 'show_quality' in d:s['show_quality']=bool(d['show_quality'])
     if 'assignment_zoom' in d:s['assignment_zoom']=max(.6,min(2.0,float(d['assignment_zoom'])))
+    old_cols=max(5,int(s.get('grid_cols',26))); old_rows=max(5,int(s.get('grid_rows',16)))
+    new_cols=max(5,min(120,int(d.get('grid_cols',old_cols)))); new_rows=max(5,min(80,int(d.get('grid_rows',old_rows))))
+    max_x=max([int(x.get('gx',0))+int(x.get('gw',1)) for x in p.get('tables',[])+p.get('hall_objects',[]) if x.get('gx') is not None] or [0])
+    max_y=max([int(x.get('gy',0))+int(x.get('gh',1)) for x in p.get('tables',[])+p.get('hall_objects',[]) if x.get('gy') is not None] or [0])
+    if new_cols<max_x or new_rows<max_y:return jsonify(error=f'לא ניתן להקטין ל-{new_cols}×{new_rows}: יש פריטים מחוץ לגודל החדש'),400
+    s['grid_cols']=new_cols; s['grid_rows']=new_rows
     touch(p);return state()
 
 @app.get('/api/validate')
@@ -190,16 +196,17 @@ def hall():
 @app.post('/api/layout/draw')
 def draw_layout_item():
     p=project();d=request.get_json(force=True);kind=d.get('kind')
-    # Geometry is stored on the same 26x16 logical grid used by the editor.
-    gx=max(0,min(25,int(d.get('gx',0)))); gy=max(0,min(15,int(d.get('gy',0))))
-    gw=max(1,min(26-gx,int(d.get('gw',1)))); gh=max(1,min(16-gy,int(d.get('gh',1))))
-    x=(gx+gw/2)/26*100; y=(gy+gh/2)/16*100; w=gw/26*100; h=gh/16*100
+    # Geometry uses the project's configurable logical grid.
+    cols=max(5,int(p.get('settings',{}).get('grid_cols',26))); rows=max(5,int(p.get('settings',{}).get('grid_rows',16)))
+    gx=max(0,min(cols-1,int(d.get('gx',0)))); gy=max(0,min(rows-1,int(d.get('gy',0))))
+    gw=max(1,min(cols-gx,int(d.get('gw',1)))); gh=max(1,min(rows-gy,int(d.get('gh',1))))
+    x=(gx+gw/2)/cols*100; y=(gy+gh/2)/rows*100; w=gw/cols*100; h=gh/rows*100
     created=[]
     def seat_cell(cx,cy,name,bench_id=None,index=None):
-        px=(cx+.5)/26*100; py=(cy+.5)/16*100
+        px=(cx+.5)/cols*100; py=(cy+.5)/rows*100
         t={'id':uid('t'),'name':name,'x':px,'y':py,'capacity':1,'rank':max(1,round(py/10,1)),
            'custom_rank':False,'locked':False,'kind':'seat','shape':'chair','rotation':0,
-           'w':100/26,'h':100/16,'gx':cx,'gy':cy,'gw':1,'gh':1,'zone':'','tags':[],'disabled':False}
+           'w':100/cols,'h':100/rows,'gx':cx,'gy':cy,'gw':1,'gh':1,'zone':'','tags':[],'disabled':False}
         if bench_id:t['bench_id']=bench_id;t['bench_index']=index
         p['tables'].append(t);created.append(t['id'])
     if kind in ('round','square'):
@@ -299,6 +306,7 @@ def generate_layout():
 @app.post('/api/tables/bulk')
 def bulk_tables():
     p=project(); d=request.get_json(force=True); ids=set(d.get('ids',[])); action=d.get('action')
+    cols=max(5,int(p.get('settings',{}).get('grid_cols',26))); rows=max(5,int(p.get('settings',{}).get('grid_rows',16)))
     items=[t for t in p['tables'] if t['id'] in ids]
     if not items:return jsonify(error='לא נבחרו פריטים'),400
     if action=='delete':
@@ -313,8 +321,8 @@ def bulk_tables():
         for t in items:
             if t.get('gx') is not None:
                 gw=max(1,int(t.get('gw',1)));gh=max(1,int(t.get('gh',1)))
-                t['gx']=max(0,min(26-gw,int(t.get('gx',0))+gdx));t['gy']=max(0,min(16-gh,int(t.get('gy',0))+gdy))
-                t['x']=(t['gx']+gw/2)/26*100;t['y']=(t['gy']+gh/2)/16*100
+                t['gx']=max(0,min(cols-gw,int(t.get('gx',0))+gdx));t['gy']=max(0,min(rows-gh,int(t.get('gy',0))+gdy))
+                t['x']=(t['gx']+gw/2)/cols*100;t['y']=(t['gy']+gh/2)/rows*100
             else:
                 t['x']=max(1,min(99,float(t.get('x',50))+dx));t['y']=max(1,min(99,float(t.get('y',50))+dy))
     elif action=='align':
@@ -336,8 +344,8 @@ def bulk_tables():
         for t in items:
             n=copy.deepcopy(t);n['id']=uid('t');n['name']=str(t.get('name','פריט'))+' עותק';n['x']=min(98,t['x']+3);n['y']=min(97,t['y']+3)
             if n.get('gx') is not None:
-                n['gx']=min(26-int(n.get('gw',1)),int(n['gx'])+2);n['gy']=min(16-int(n.get('gh',1)),int(n['gy'])+2)
-                n['x']=(n['gx']+int(n.get('gw',1))/2)/26*100;n['y']=(n['gy']+int(n.get('gh',1))/2)/16*100
+                n['gx']=min(cols-int(n.get('gw',1)),int(n['gx'])+2);n['gy']=min(rows-int(n.get('gh',1)),int(n['gy'])+2)
+                n['x']=(n['gx']+int(n.get('gw',1))/2)/cols*100;n['y']=(n['gy']+int(n.get('gh',1))/2)/rows*100
             if n.get('bench_id'):n['bench_id']=uid('bench')
             new.append(n)
         p['tables'].extend(new)
@@ -416,8 +424,8 @@ def edit_hall_object(oid):
     for k in ('gx','gy','gw','gh'):
         if k in d:o[k]=int(d[k])
     if o.get('gx') is not None:
-        o['x']=(o['gx']+int(o.get('gw',1))/2)/26*100;o['y']=(o['gy']+int(o.get('gh',1))/2)/16*100
-        o['w']=int(o.get('gw',1))/26*100;o['h']=int(o.get('gh',1))/16*100
+        o['x']=(o['gx']+int(o.get('gw',1))/2)/cols*100;o['y']=(o['gy']+int(o.get('gh',1))/2)/rows*100
+        o['w']=int(o.get('gw',1))/cols*100;o['h']=int(o.get('gh',1))/rows*100
     touch(p);return state()
 @app.delete('/api/hall-objects/<oid>')
 def delete_hall_object(oid):
