@@ -330,18 +330,38 @@ def bulk_tables():
                 t['x']=max(1,min(99,float(t.get('x',50))+dx));t['y']=max(1,min(99,float(t.get('y',50))+dy))
     elif action=='align':
         mode=d.get('mode')
-        if mode in ('left','right','hcenter'):
-            val=min(t['x'] for t in items) if mode=='left' else max(t['x'] for t in items) if mode=='right' else sum(t['x'] for t in items)/len(items)
-            for t in items:t['x']=val
-        elif mode in ('top','bottom','vcenter'):
-            val=min(t['y'] for t in items) if mode=='top' else max(t['y'] for t in items) if mode=='bottom' else sum(t['y'] for t in items)/len(items)
-            for t in items:t['y']=val
+        gridded=[t for t in items if t.get('gx') is not None]
+        if len(gridded)==len(items):
+            if mode in ('left','right','hcenter'):
+                vals=[int(t.get('gx',0)) for t in items]
+                val=min(vals) if mode=='left' else max(vals) if mode=='right' else round(sum(vals)/len(vals))
+                for t in items:
+                    gw=max(1,int(t.get('gw',1)));t['gx']=max(0,min(cols-gw,val));t['x']=(t['gx']+gw/2)/cols*100
+            elif mode in ('top','bottom','vcenter'):
+                vals=[int(t.get('gy',0)) for t in items]
+                val=min(vals) if mode=='top' else max(vals) if mode=='bottom' else round(sum(vals)/len(vals))
+                for t in items:
+                    gh=max(1,int(t.get('gh',1)));t['gy']=max(0,min(rows-gh,val));t['y']=(t['gy']+gh/2)/rows*100
+        else:
+            if mode in ('left','right','hcenter'):
+                val=min(t['x'] for t in items) if mode=='left' else max(t['x'] for t in items) if mode=='right' else sum(t['x'] for t in items)/len(items)
+                for t in items:t['x']=val
+            elif mode in ('top','bottom','vcenter'):
+                val=min(t['y'] for t in items) if mode=='top' else max(t['y'] for t in items) if mode=='bottom' else sum(t['y'] for t in items)/len(items)
+                for t in items:t['y']=val
     elif action=='distribute':
-        axis=d.get('axis','x')
-        key='x' if axis=='x' else 'y'; ordered=sorted(items,key=lambda t:t[key])
-        if len(ordered)>2:
-            start=ordered[0][key];end=ordered[-1][key];step=(end-start)/(len(ordered)-1)
-            for i,t in enumerate(ordered):t[key]=start+i*step
+        axis=d.get('axis','x'); gridded=[t for t in items if t.get('gx') is not None]
+        if len(items)>2 and len(gridded)==len(items):
+            key='gx' if axis=='x' else 'gy'; ordered=sorted(items,key=lambda t:int(t.get(key,0)))
+            startv=int(ordered[0].get(key,0));endv=int(ordered[-1].get(key,0));step=(endv-startv)/(len(ordered)-1)
+            for i,t in enumerate(ordered):
+                if axis=='x':
+                    gw=max(1,int(t.get('gw',1)));t['gx']=max(0,min(cols-gw,round(startv+i*step)));t['x']=(t['gx']+gw/2)/cols*100
+                else:
+                    gh=max(1,int(t.get('gh',1)));t['gy']=max(0,min(rows-gh,round(startv+i*step)));t['y']=(t['gy']+gh/2)/rows*100
+        elif len(items)>2:
+            key='x' if axis=='x' else 'y'; ordered=sorted(items,key=lambda t:t[key]);startv=ordered[0][key];endv=ordered[-1][key];step=(endv-startv)/(len(ordered)-1)
+            for i,t in enumerate(ordered):t[key]=startv+i*step
     elif action=='duplicate':
         new=[]
         for t in items:
