@@ -76,27 +76,28 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
 .builder-canvas.room-grid .builder-item.grid-bound .grid-seat-icon{font-size:clamp(8px,1.1vw,17px)!important}
 .builder-canvas.room-grid .builder-item.grid-bound .grid-seat-cap{transform:translate(-2px,-2px)}
 
-/* ===== Hall Builder V10 — one coordinate system, one visible grid ===== */
-#builderCanvas.room-grid{position:relative!important;overflow:hidden!important;background-color:#f7faff!important;background-size:calc(100% / 60) calc(100% / 40)!important;background-image:linear-gradient(to right,#c8d7e8 1px,transparent 1px),linear-gradient(to bottom,#c8d7e8 1px,transparent 1px)!important}
-.dark #builderCanvas.room-grid{background-color:#101927!important;background-image:linear-gradient(to right,#33465d 1px,transparent 1px),linear-gradient(to bottom,#33465d 1px,transparent 1px)!important}
-#builderCanvas .grid-item,#builderCanvas .hall-object{position:absolute!important;box-sizing:border-box!important;margin:0!important;transform:none!important;min-width:0!important;min-height:0!important;display:flex!important;align-items:center;justify-content:center;overflow:visible}
-#builderCanvas .grid-item{border:1px solid #6f91b2!important;background:#eaf6ff!important;border-radius:3px!important;padding:0!important;box-shadow:none!important}
-#builderCanvas .grid-item.kind-chair{background:#dff5ff!important;border-color:#6aa6c8!important}
-#builderCanvas .grid-item.kind-bench{background:#e6f4fb!important;border-color:#5c829c!important;border-radius:2px!important}
-#builderCanvas .grid-item.kind-square{background:#fff0d7!important;border-color:#b9833e!important;border-radius:3px!important}
+
+/* ===== Hall Builder V11 — room-assignment drafting board ===== */
+#builderCanvas.room-grid{position:relative!important;width:780px!important;height:480px!important;min-width:780px!important;min-height:480px!important;max-width:none!important;overflow:hidden!important;direction:rtl;background-color:#f8fafc!important;background-size:30px 30px!important;background-image:linear-gradient(to left,#cbd5e1 1px,transparent 1px),linear-gradient(to bottom,#cbd5e1 1px,transparent 1px)!important}
+.dark #builderCanvas.room-grid{background-color:#101827!important;background-image:linear-gradient(to left,#34445a 1px,transparent 1px),linear-gradient(to bottom,#34445a 1px,transparent 1px)!important}
+.hall-plan-frame{overflow:auto!important;direction:rtl}.map-column{min-width:0}
+#builderCanvas .grid-item,#builderCanvas .hall-object{position:absolute!important;box-sizing:border-box!important;margin:0!important;transform:none!important;min-width:0!important;min-height:0!important;display:flex!important;align-items:center;justify-content:center}
+#builderCanvas .grid-item{border:1.5px solid #7189a3!important;background:#eef6fc!important;border-radius:3px!important;padding:1px!important;box-shadow:0 1px 2px #0001!important}
+#builderCanvas .grid-item.kind-chair{background:#e4f4fb!important;border-color:#68a0bd!important}
+#builderCanvas .grid-item.kind-bench{background:#e4f0f7!important;border-color:#527c96!important}
+#builderCanvas .grid-item.kind-square{background:#fff1da!important;border-color:#b9823d!important}
 #builderCanvas .grid-item.kind-round{background:#eeeaff!important;border-color:#746bc1!important;border-radius:50%!important}
-#builderCanvas .grid-item.selected-item{outline:2px solid #087be6!important;outline-offset:1px;z-index:15!important}
-#builderCanvas .item-symbol{font-size:clamp(9px,1.35vw,22px);line-height:1;position:relative;z-index:2;color:#27445e;pointer-events:none}
+#builderCanvas .grid-item.selected-item{outline:2px solid #087be6!important;outline-offset:2px;z-index:15!important}
+#builderCanvas .item-symbol{font-size:16px;line-height:1;z-index:2;color:#27445e;pointer-events:none}
 #builderCanvas .kind-round .item-symbol{color:#554bb2}#builderCanvas .kind-square .item-symbol{color:#9a611f}
-#builderCanvas .item-cap{position:absolute;inset-inline-start:2px;top:1px;font-size:8px;font-weight:800;color:#314a61;z-index:4}
-#builderCanvas .table-seat-ring{position:absolute;inset:8%;border:1px solid currentColor;border-radius:inherit;opacity:.65;pointer-events:none}
-#builderCanvas .table-seat-ring i{--a:calc(360deg / var(--n) * var(--i));position:absolute;width:4px;height:4px;border-radius:50%;background:#27445e;left:calc(50% - 2px);top:calc(50% - 2px);transform:rotate(var(--a)) translateY(-45%)}
-#builderCanvas .hall-object{border:1px solid #778a9e!important;font-size:10px;z-index:2}
+#builderCanvas .item-cap{position:absolute;inset-inline-start:3px;top:2px;font-size:9px;font-weight:800;color:#314a61;z-index:4}
+#builderCanvas .table-seat-ring{position:absolute;inset:12%;border:1px solid currentColor;border-radius:inherit;opacity:.55;pointer-events:none}
+#builderCanvas .table-seat-ring i{display:none}
+#builderCanvas .hall-object{border:1.5px solid #778a9e!important;font-size:11px;z-index:2;overflow:hidden}
 #builderCanvas .object-stage{background:repeating-linear-gradient(135deg,#d6dde5,#d6dde5 6px,#eef2f6 6px,#eef2f6 12px)!important}
 #builderCanvas .object-aisle{background:#e9f0f788!important;border-style:dashed!important}
-#builderCanvas .object-zone{background:#d9efff55!important;border:1px dashed #4e91c5!important}
-#draftBand{position:absolute!important;display:none;box-sizing:border-box!important;z-index:40!important;border:2px solid #0d78dc!important;background:#208cf229!important;border-radius:0!important;pointer-events:none!important}
-#draftBand[data-kind="round"]{border-radius:50%!important;background:#7668db24!important;border-color:#675cc8!important}
-#draftBand[data-kind="square"]{background:#eaa54224!important;border-color:#b97822!important}
-#draftBand[data-kind="stage"]{background:#64748b24!important;border-color:#64748b!important}
+#builderCanvas .object-zone{background:#d9efff55!important;border:1.5px dashed #4e91c5!important}
+#draftBand{position:absolute!important;display:none;box-sizing:border-box!important;z-index:40!important;border:2px dashed #0d78dc!important;background:#208cf222!important;border-radius:2px!important;pointer-events:none!important}
+#draftBand.bad{border-color:#dc2626!important;background:#dc262622!important}
+#draftBand[data-kind="round"]{border-radius:50%!important}
 #selectionBox{z-index:50!important}
