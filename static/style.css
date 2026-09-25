@@ -264,3 +264,21 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
 .display-zoom-stage{position:relative;min-width:1px;min-height:1px;transition:width .12s ease,height .12s ease}
 #displayCanvas{position:absolute!important;top:0;right:0;transition:transform .12s ease}
 @media(max-width:700px){.display-head{align-items:flex-start}.display-actions{width:100%}.display-actions #displayZoomRange{flex:1}}
+
+/* Final display: labels are clipped inside their own cell; details live in a floating tooltip. */
+#displayCanvas .display-seat{overflow:hidden!important;z-index:3!important}
+#displayCanvas .display-seat:hover,#displayCanvas .display-seat:focus-visible{overflow:hidden!important;z-index:4!important}
+#displayCanvas .display-number,#displayCanvas .display-person{
+  display:block!important;width:100%!important;max-width:100%!important;
+  white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
+  word-break:normal!important;overflow-wrap:normal!important;
+}
+.display-floating-tooltip{
+  position:fixed;z-index:99999;min-width:180px;max-width:300px;padding:10px 12px;
+  border-radius:10px;background:#111827;color:#fff;box-shadow:0 10px 28px #0006;
+  text-align:right;font-size:12px;line-height:1.5;pointer-events:none;direction:rtl
+}
+.display-floating-tooltip[hidden]{display:none}
+.display-floating-tooltip strong{display:block;margin-bottom:5px;color:#cfe7ff}
+.display-floating-tooltip .display-tip-person{display:grid;gap:1px;margin-top:5px}
+.display-floating-tooltip span,.display-floating-tooltip small{display:block;color:#cbd5e1;font-size:10px}
