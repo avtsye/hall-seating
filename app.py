@@ -18,7 +18,7 @@ def new_project(name='אולם חדש'):
                            'rank':round(1+r*1.0+abs(c-2.5)*.35,2),'custom_rank':False,'locked':False,'kind':'table','shape':'round'})
     return {'id':uid('p'),'name':name,'created':now(),'modified':now(),
             'hall':{'name':'האולם','stage_label':'חזית / במה','width':100,'height':100,'seating_type':'round_tables'},
-            'tables':tables,'hall_objects':[],'settings':{'seat_preference':'front_center','front_weight':1.0,'center_weight':0.35},'groups':[], 'people':[], 'rules':[], 'snapshots':[]}
+            'tables':tables,'hall_objects':[],'settings':{'seat_preference':'front_center','front_weight':1.0,'center_weight':0.35,'show_quality':False,'assignment_zoom':1.0},'groups':[], 'people':[], 'rules':[], 'snapshots':[]}
 
 def default_state():
     p=new_project('השיבוץ הראשון')
@@ -83,6 +83,15 @@ def effective_rank(p,t):
 
 def score_candidate(p,person,t,group_priority):
     score=effective_rank(p,t)*10 + group_priority*2
+    pzone=str(person.get('preferred_zone') or '').strip()
+    if pzone: score += (-45 if str(t.get('zone') or '').strip()==pzone else 18)
+    ptags=set(person.get('preferred_tags') or [])
+    if ptags:
+        matches=len(ptags.intersection(set(t.get('tags') or [])))
+        score-=matches*18
+    pref=person.get('seat_preference','project')
+    if pref=='front': score += max(0.0,min(100.0,float(t.get('y',50))))*.25
+    elif pref=='center': score += abs(float(t.get('x',50))-50)*.18
     same=sum(1 for x in occupants(p,t['id']) if x.get('group_id')==person.get('group_id'))
     other=len(occupants(p,t['id']))-same
     score-=same*9; score+=other*2
@@ -137,7 +146,39 @@ def project_settings():
     for k,default in (('front_weight',1.0),('center_weight',0.35)):
         if k in d:s[k]=max(0.0,min(10.0,float(d[k])))
         else:s.setdefault(k,default)
+    if 'show_quality' in d:s['show_quality']=bool(d['show_quality'])
+    if 'assignment_zoom' in d:s['assignment_zoom']=max(.6,min(2.0,float(d['assignment_zoom'])))
     touch(p);return state()
+
+@app.get('/api/validate')
+def validate_project():
+    p=project(); issues=[]; cap=sum(int(t.get('capacity',1)) for t in p['tables'] if not t.get('disabled'))
+    if cap < len(p['people']): issues.append({'level':'hard','message':f'חסרים {len(p["people"])-cap} מקומות ישיבה'})
+    ids={t['id'] for t in p['tables']}
+    for r in p['rules']:
+        if r.get('table_id') and r.get('table_id') not in ids:issues.append({'level':'hard','message':'כלל מפנה למקום שכבר אינו קיים'})
+    for t in p['tables']:
+        if not (0<=float(t.get('x',0))<=100 and 0<=float(t.get('y',0))<=100):issues.append({'level':'soft','message':f'{t.get("name","מקום")} נמצא מחוץ לגבולות האולם'})
+    seen={}
+    for t in p['tables']:
+        key=(round(float(t.get('x',0)),1),round(float(t.get('y',0)),1))
+        if key in seen:issues.append({'level':'soft','message':f'ייתכן חפיפה בין {seen[key]} לבין {t.get("name","מקום")}'})
+        seen[key]=t.get('name','מקום')
+    return jsonify({'issues':issues,'capacity':cap,'people':len(p['people']),'unassigned':sum(1 for x in p['people'] if not x.get('table_id'))})
+
+@app.get('/api/explain/<pid>')
+def explain_assignment(pid):
+    p=project(); x=person_by_id(p,pid)
+    if not x:return jsonify(error='person not found'),404
+    t=table_by_id(p,x.get('table_id')) if x.get('table_id') else None
+    if not t:return jsonify({'title':x['name'],'lines':['האדם עדיין אינו משובץ']})
+    lines=[f'מקום: {t.get("name","")}',f'דירוג מיקום: {effective_rank(p,t):.2f}']
+    if x.get('preferred_zone'):lines.append(('✓ ' if t.get('zone')==x.get('preferred_zone') else '○ ')+f'אזור מועדף: {x.get("preferred_zone")}')
+    tags=set(x.get('preferred_tags') or []).intersection(set(t.get('tags') or []))
+    if tags:lines.append('✓ תגיות מתאימות: '+', '.join(sorted(tags)))
+    g=group_by_id(p,x.get('group_id')) if x.get('group_id') else None
+    if g:lines.append(f'קדימות קבוצה: {g.get("priority",999)}')
+    return jsonify({'title':x['name'],'lines':lines,'rank':effective_rank(p,t)})
 
 @app.post('/api/hall')
 def hall():
@@ -151,7 +192,7 @@ def add_table():
     p=project(); d=request.get_json(force=True)
     t={'id':uid('t'),'name':(d.get('name') or f"שולחן {len(p['tables'])+1}").strip(),
        'x':float(d.get('x',50)),'y':float(d.get('y',50)),'capacity':max(1,int(d.get('capacity',4))),
-       'rank':float(d.get('rank',10)),'custom_rank':bool(d.get('custom_rank',False)),'locked':False,'kind':d.get('kind','table'),'shape':d.get('shape','round'),'rotation':float(d.get('rotation',0)),'w':float(d.get('w',0)),'h':float(d.get('h',0))}
+       'rank':float(d.get('rank',10)),'custom_rank':bool(d.get('custom_rank',False)),'locked':False,'kind':d.get('kind','table'),'shape':d.get('shape','round'),'rotation':float(d.get('rotation',0)),'w':float(d.get('w',0)),'h':float(d.get('h',0)),'zone':str(d.get('zone','')).strip(),'tags':d.get('tags',[]) if isinstance(d.get('tags',[]),list) else [],'disabled':bool(d.get('disabled',False))}
     p['tables'].append(t); touch(p); return state()
 @app.patch('/api/tables/<tid>')
 def edit_table(tid):
@@ -159,7 +200,7 @@ def edit_table(tid):
     if not t:return jsonify(error='table not found'),404
     d=request.get_json(force=True)
     if 'name' in d:t['name']=str(d['name']).strip()
-    for k in ('kind','shape'):
+    for k in ('kind','shape','zone'):
         if k in d:t[k]=str(d[k])
     for k in ('x','y','rank','rotation','w','h'):
         if k in d:t[k]=float(d[k])
@@ -169,6 +210,8 @@ def edit_table(tid):
         t['capacity']=cap
     if 'locked' in d:t['locked']=bool(d['locked'])
     if 'custom_rank' in d:t['custom_rank']=bool(d['custom_rank'])
+    if 'tags' in d:t['tags']=d['tags'] if isinstance(d['tags'],list) else []
+    if 'disabled' in d:t['disabled']=bool(d['disabled'])
     touch(p); return state()
 @app.delete('/api/tables/<tid>')
 def delete_table(tid):
@@ -332,15 +375,16 @@ def add_person():
     if not name:return jsonify(error='חסר שם'),400
     if any(x['name']==name for x in p['people']):return jsonify(error='השם כבר קיים'),400
     if gid and not group_by_id(p,gid):return jsonify(error='group not found'),400
-    p['people'].append({'id':uid('u'),'name':name,'group_id':gid,'table_id':None,'seat':None,'locked':False,'note':''}); touch(p); return state()
+    p['people'].append({'id':uid('u'),'name':name,'group_id':gid,'table_id':None,'seat':None,'locked':False,'note':'','preferred_zone':'','preferred_tags':[],'seat_preference':'project'}); touch(p); return state()
 @app.patch('/api/people/<pid>')
 def edit_person(pid):
     p=project(); x=person_by_id(p,pid)
     if not x:return jsonify(error='person not found'),404
     d=request.get_json(force=True)
-    for k in ('name','group_id','note'):
+    for k in ('name','group_id','note','preferred_zone','seat_preference'):
         if k in d:x[k]=d[k]
     if 'locked' in d:x['locked']=bool(d['locked'])
+    if 'preferred_tags' in d:x['preferred_tags']=d['preferred_tags'] if isinstance(d['preferred_tags'],list) else []
     touch(p); return state()
 @app.delete('/api/people/<pid>')
 def delete_person(pid):
@@ -363,7 +407,7 @@ def upload_people():
             if not g:
                 g={'id':uid('g'),'name':gname,'priority':len(p['groups'])+1};p['groups'].append(g)
             gid=g['id']
-        p['people'].append({'id':uid('u'),'name':name,'group_id':gid,'table_id':None,'seat':None,'locked':False,'note':''});added+=1
+        p['people'].append({'id':uid('u'),'name':name,'group_id':gid,'table_id':None,'seat':None,'locked':False,'note':'','preferred_zone':'','preferred_tags':[],'seat_preference':'project'});added+=1
     touch(p); return jsonify(added=added,**state().get_json())
 
 @app.post('/api/seat')
