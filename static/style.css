@@ -255,3 +255,12 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
 .display-tip-person{display:grid;gap:1px;margin-top:5px}
 .display-tip-person span,.display-tip-person small,.tip-action{display:block;color:var(--muted);font-size:10px}
 .tip-action{margin-top:7px;border-top:1px solid var(--line);padding-top:5px}
+
+/* Final display zoom controls and scaled-map viewport. */
+.display-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.display-actions #displayZoomRange{width:150px;min-width:90px}
+.display-actions #displayZoomLabel{min-width:44px;text-align:center;font-weight:800;font-size:12px}
+.display-scroll{overflow:auto;position:relative}
+.display-zoom-stage{position:relative;min-width:1px;min-height:1px;transition:width .12s ease,height .12s ease}
+#displayCanvas{position:absolute!important;top:0;right:0;transition:transform .12s ease}
+@media(max-width:700px){.display-head{align-items:flex-start}.display-actions{width:100%}.display-actions #displayZoomRange{flex:1}}
