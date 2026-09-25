@@ -52,7 +52,7 @@ if(localStorage.theme==='dark')document.body.classList.add('dark');
 function use(d){S=d.state;P=d.project;V=d.violations||[];render()}
 
 /* ===== Hall Builder V12 — same drafting engine as room assignment ===== */
-const GRID_COLS=26,GRID_ROWS=16;let CELL=clampGridPx(localStorage.getItem('hallBuilderGridPx')||30);
+let GRID_COLS=26,GRID_ROWS=16;let CELL=clampGridPx(localStorage.getItem('hallBuilderGridPx')||30);
 function clampGridPx(v){return Math.max(16,Math.min(60,Math.round(+v||30)))}
 const clampI=(v,lo,hi)=>Math.max(lo,Math.min(hi,Math.round(+v||0)));
 let builderTool='move',builderLayout='round_tables',builderSelected=new Set(),builderUndo=[],builderRedo=[];
@@ -86,7 +86,7 @@ async function applyRect(a,b){
  if(builderTool==='erase'){let hits=allItems().filter(q=>cellsClash(q.r,area));if(!hits.length)return;remember();for(const q of hits){if(q.type==='table')await api('/api/tables/'+q.id,{method:'DELETE'});else await api('/api/hall-objects/'+q.id,{method:'DELETE'})}await load();return}
  remember();let d=await api('/api/layout/draw',json('POST',{kind:builderTool,...area,capacity:+$('#genCapacity').value||4}));S=d.state;P=d.project;V=d.violations||[];builderSelected=new Set((d.created||[]).filter(id=>P.tables.some(t=>t.id===id)));render()
 }
-function renderBuilder(){let canvas=$('#builderCanvas');if(!canvas||!P)return;P.hall_objects??=[];P.tables??=[];builderSelected=new Set([...builderSelected].filter(id=>P.tables.some(t=>t.id===id)));$('#builderHallName').textContent=P.hall?.name||'האולם';$('#builderCount').textContent=P.tables.length+' פריטי ישיבה · '+P.tables.reduce((a,t)=>a+(+t.capacity||0),0)+' מקומות';canvas.querySelectorAll('.builder-item,.hall-object').forEach(n=>n.remove());let help=canvas.querySelector('.empty-help');if(help)help.style.display=P.tables.length+P.hall_objects.length?'none':'flex';
+function renderBuilder(){let canvas=$('#builderCanvas');if(!canvas||!P)return;GRID_COLS=Math.max(5,Number(P.settings?.grid_cols||26));GRID_ROWS=Math.max(5,Number(P.settings?.grid_rows||16));let gc=$('#gridCols'),gr=$('#gridRows');if(gc&&document.activeElement!==gc)gc.value=GRID_COLS;if(gr&&document.activeElement!==gr)gr.value=GRID_ROWS;applyGridDisplaySize(CELL,false);P.hall_objects??=[];P.tables??=[];builderSelected=new Set([...builderSelected].filter(id=>P.tables.some(t=>t.id===id)));$('#builderHallName').textContent=P.hall?.name||'האולם';$('#builderCount').textContent=P.tables.length+' פריטי ישיבה · '+P.tables.reduce((a,t)=>a+(+t.capacity||0),0)+' מקומות';canvas.querySelectorAll('.builder-item,.hall-object').forEach(n=>n.remove());let help=canvas.querySelector('.empty-help');if(help)help.style.display=P.tables.length+P.hall_objects.length?'none':'flex';
  P.hall_objects.forEach(o=>{let el=document.createElement('div');el.className='hall-object object-'+(o.kind||'zone');el.dataset.oid=o.id;gridStyle(el,gridRect(o));el.innerHTML='<span>'+esc(o.name||'אובייקט')+'</span>';el.style.pointerEvents='none';canvas.appendChild(el)});
  P.tables.forEach(t=>{let el=document.createElement('div');el.className='builder-item grid-item kind-'+iconClass(t)+(builderSelected.has(t.id)?' selected-item':'');el.dataset.bid=t.id;gridStyle(el,gridRect(t));el.innerHTML='<span class="item-symbol">'+icon(t)+'</span>'+tableSeatDots(t)+'<span class="item-cap">'+(t.kind==='seat'?'':t.capacity)+'</span>';el.style.pointerEvents='none';canvas.appendChild(el)});selectionInfo()
 }
@@ -130,6 +130,10 @@ function wireBuilderGrid(){
 async function bulk(action,extra={}){if(!builderSelected.size)return toast('יש לבחור פריט אחד לפחות');remember();use(await api('/api/tables/bulk',json('POST',{ids:[...builderSelected],action,...extra})))}
 function initHallBuilder(){
  applyGridDisplaySize(CELL,false);
+ let gc=$('#gridCols'),gr=$('#gridRows'),applyDims=$('#applyGridDimensions');
+ if(gc)gc.value=GRID_COLS;if(gr)gr.value=GRID_ROWS;
+ if(applyDims)applyDims.onclick=async()=>{let cols=Math.max(5,Math.min(120,Number(gc.value)||GRID_COLS)),rows=Math.max(5,Math.min(80,Number(gr.value)||GRID_ROWS));try{let s=P.settings||{};let d=await api('/api/project/settings',json('POST',{seat_preference:s.seat_preference||'front_center',front_weight:Number(s.front_weight??1),center_weight:Number(s.center_weight??.35),show_quality:!!s.show_quality,assignment_zoom:Number(s.assignment_zoom??1),grid_cols:cols,grid_rows:rows}));use(d);toast('גודל הרשת עודכן ל-'+cols+'×'+rows)}catch(err){toast(err.message)}};
+
  let gi=$('#gridCellSize');if(gi){gi.value=CELL;gi.oninput=()=>applyGridDisplaySize(gi.value);gi.onchange=()=>applyGridDisplaySize(gi.value)}
  $$('[data-grid-px]').forEach(b=>b.onclick=()=>applyGridDisplaySize(b.dataset.gridPx));$$('.layout-card').forEach(x=>x.onclick=()=>builderSetLayout(x.dataset.layout));$$('[data-tool]').forEach(x=>x.onclick=()=>setTool(x.dataset.tool));
  $('#generateLayout').onclick=async()=>{if((P.tables.length+P.hall_objects.length)&&!confirm('להחליף את המבנה הקיים?'))return;remember();use(await api('/api/layout/generate',json('POST',{mode:builderLayout==='square_tables'?'square':builderLayout==='rows'?'rows':'round',rows:+$('#genRows').value||5,cols:+$('#genCols').value||6,capacity:+$('#genCapacity').value||4})))};
