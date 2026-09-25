@@ -46,11 +46,12 @@ $('#themeBtn').onclick=()=>{document.body.classList.toggle('dark');localStorage.
 if(localStorage.theme==='dark')document.body.classList.add('dark');
 function use(d){S=d.state;P=d.project;V=d.violations||[];render()}
 
+let hallDrawAnchor=null,hallDrawDown=null;const HSW=60,HSH=40;
 let builderTool='select',builderLayout='round_tables',builderSelected=new Set(),builderUndo=[],builderRedo=[],builderDrag=null,builderBox=null,builderSuppressClick=false;
 function builderSnapshot(){return JSON.stringify({tables:structuredClone(P.tables||[]),hall_objects:structuredClone(P.hall_objects||[]),assignments:(P.people||[]).map(x=>({id:x.id,table_id:x.table_id,seat:x.seat}))})}
 function builderRemember(){if(!P)return;builderUndo.push(builderSnapshot());if(builderUndo.length>50)builderUndo.shift();builderRedo=[]}
 async function builderRestore(raw){use(await api('/api/layout/restore',json('POST',JSON.parse(raw))))}
-function builderSetTool(tool){builderTool=tool;$$('[data-tool]').forEach(x=>x.classList.toggle('selected',x.dataset.tool===tool));if($('#benchOptions'))$('#benchOptions').style.display=tool==='bench'?'grid':'none';if($('#builderCanvas'))$('#builderCanvas').dataset.tool=tool}
+function builderSetTool(tool){builderTool=tool;if(!['hallshape','hallerase'].includes(tool))hallDrawAnchor=null;$$('[data-tool]').forEach(x=>x.classList.toggle('selected',x.dataset.tool===tool));if($('#benchOptions'))$('#benchOptions').style.display=tool==='bench'?'grid':'none';if($('#builderCanvas'))$('#builderCanvas').dataset.tool=tool}
 function builderSetLayout(layout){builderLayout=layout;$$('.layout-card').forEach(x=>x.classList.toggle('selected',x.dataset.layout===layout));if($('#genCapWrap'))$('#genCapWrap').style.display=layout==='rows'?'none':''}
 function builderSnap(v){if(!$('#snapGrid')?.checked)return v;let s=Number($('#gridSize')?.value)||2;return Math.round(v/s)*s}
 function builderPoint(e,canvas){let r=canvas.getBoundingClientRect();return{x:Math.max(1,Math.min(99,builderSnap((e.clientX-r.left)/r.width*100))),y:Math.max(1,Math.min(99,builderSnap((e.clientY-r.top)/r.height*100))),r}}
@@ -58,9 +59,25 @@ function seatIconClass(t){if(t.bench_id)return'icon-bench';if(t.kind==='seat')re
 function seatIcon(t){if(t.bench_id)return'▥';if(t.kind==='seat')return'♙';return t.shape==='square'?'▣':'◉'}
 function effectiveRankJS(t){if(t.custom_rank)return Number(t.rank)||10;let s=P.settings||{},front=(Number(t.y)||50)/10,center=Math.abs((Number(t.x)||50)-50)/5;if(s.seat_preference==='front_only')return front;if(s.seat_preference==='center_only')return center;if(s.seat_preference==='manual')return Number(t.rank)||10;return front*(Number(s.front_weight)??1)+center*(Number(s.center_weight)??.35)}
 function builderSelectionInfo(){let e=$('#selectionInfo');if(e)e.textContent=builderSelected.size?builderSelected.size+' פריטים נבחרו':'לא נבחרו פריטים'}
+function hallShapeKey(x,y){return x+','+y}
+function hallShapeCells(){return Array.isArray(P?.hall_shape)?P.hall_shape:[]}
+function hallShapePoint(e,canvas){let r=canvas.getBoundingClientRect();return{x:Math.max(0,Math.min(HSW-1,Math.floor((e.clientX-r.left)/r.width*HSW))),y:Math.max(0,Math.min(HSH-1,Math.floor((e.clientY-r.top)/r.height*HSH)))}}
+function hallShapeRect(a,b){let out=[];for(let y=Math.min(a.y,b.y);y<=Math.max(a.y,b.y);y++)for(let x=Math.min(a.x,b.x);x<=Math.max(a.x,b.x);x++)out.push({x,y});return out}
+function hallShapePath(cells){
+ const set=new Set(cells.map(q=>hallShapeKey(q.x,q.y))),edges=new Map(),add=(x1,y1,x2,y2)=>{let k=x1+','+y1;(edges.get(k)||edges.set(k,[]).get(k)).push([x2,y2])};
+ for(const q of cells){let x=q.x,y=q.y;if(!set.has(hallShapeKey(x,y-1)))add(x,y,x+1,y);if(!set.has(hallShapeKey(x+1,y)))add(x+1,y,x+1,y+1);if(!set.has(hallShapeKey(x,y+1)))add(x+1,y+1,x,y+1);if(!set.has(hallShapeKey(x-1,y)))add(x,y+1,x,y)}
+ let paths=[];while(edges.size){let [k,outs]=edges.entries().next().value,[sx,sy]=k.split(',').map(Number),cx=sx,cy=sy,pts=[[cx,cy]];for(let guard=0;guard<10000;guard++){let a=edges.get(cx+','+cy);if(!a?.length)break;let [nx,ny]=a.shift();if(!a.length)edges.delete(cx+','+cy);let p=pts.at(-1),p2=pts.at(-2);if(p2&&((p2[0]===p[0]&&p[0]===nx)||(p2[1]===p[1]&&p[1]===ny)))pts[pts.length-1]=[nx,ny];else pts.push([nx,ny]);cx=nx;cy=ny;if(cx===sx&&cy===sy)break}if(pts.length>2)paths.push(pts)}
+ return paths.map(p=>'M'+p.map(q=>q[0]+' '+q[1]).join('L')+'Z').join('')
+}
+function renderHallShape(){let p=$('#hallShapePath'),svg=$('#hallShapeSvg');if(!p||!svg)return;let cells=hallShapeCells();p.setAttribute('d',hallShapePath(cells));svg.classList.toggle('empty',!cells.length)}
+async function applyHallShapeRect(a,b,erase=false){let map=new Map(hallShapeCells().map(q=>[hallShapeKey(q.x,q.y),q]));for(const q of hallShapeRect(a,b)){let k=hallShapeKey(q.x,q.y);erase?map.delete(k):map.set(k,q)}use(await api('/api/hall-shape',json('POST',{cells:[...map.values()]})))}
+function hallDrawBand(a,b,bad=false){let band=$('#hallDrawBand'),canvas=$('#builderCanvas');if(!band||!canvas)return;if(!a||!b){band.style.display='none';return}let cw=canvas.clientWidth/HSW,ch=canvas.clientHeight/HSH;band.style.display='block';band.classList.toggle('erase',bad);band.style.left=Math.min(a.x,b.x)*cw+'px';band.style.top=Math.min(a.y,b.y)*ch+'px';band.style.width=(Math.abs(a.x-b.x)+1)*cw+'px';band.style.height=(Math.abs(a.y-b.y)+1)*ch+'px'}
+function hallDrawPointerDown(e){if(!['hallshape','hallerase'].includes(builderTool)||e.button!==0)return false;let canvas=$('#builderCanvas');if(e.target.closest('.builder-item,.hall-object'))return false;let p=hallShapePoint(e,canvas),erase=builderTool==='hallerase';e.preventDefault();e.stopPropagation();if(hallDrawAnchor){let a=hallDrawAnchor;hallDrawAnchor=null;hallDrawBand(null,null);applyHallShapeRect(a,p,erase);hallDrawDown={done:true};return true}hallDrawDown={start:p,cur:p,erase,moved:false};hallDrawBand(p,p,erase);try{canvas.setPointerCapture(e.pointerId)}catch{}return true}
+function hallDrawPointerMove(e){if(!hallDrawDown||hallDrawDown.done)return;let p=hallShapePoint(e,$('#builderCanvas'));hallDrawDown.cur=p;hallDrawDown.moved=hallDrawDown.moved||p.x!==hallDrawDown.start.x||p.y!==hallDrawDown.start.y;hallDrawBand(hallDrawDown.start,p,hallDrawDown.erase)}
+function hallDrawPointerUp(){if(!hallDrawDown)return;let d=hallDrawDown;hallDrawDown=null;if(d.done)return;if(d.moved){hallDrawBand(null,null);applyHallShapeRect(d.start,d.cur,d.erase)}else{hallDrawAnchor=d.start;hallDrawBand(d.start,d.start,d.erase)}}
 function renderBuilder(){
  let canvas=$('#builderCanvas');if(!canvas||!P)return;P.hall_objects??=[];P.tables??=[];
- builderSelected=new Set([...builderSelected].filter(id=>P.tables.some(t=>t.id===id)));
+ builderSelected=new Set([...builderSelected].filter(id=>P.tables.some(t=>t.id===id)));renderHallShape();
  $('#builderHallName').textContent=P.hall?.name||'האולם';$('#builderStage').textContent=P.hall?.stage_label||'חזית / במה';
  $('#builderCount').textContent=P.tables.length+' פריטי ישיבה · '+P.tables.reduce((a,t)=>a+(Number(t.capacity)||0),0)+' מקומות';
  builderSetLayout(P.hall?.seating_type||builderLayout);canvas.querySelectorAll('.builder-item,.hall-object').forEach(n=>n.remove());
@@ -99,7 +116,7 @@ function initHallBuilder(){
  $('#deleteSelected')?.addEventListener('click',async()=>{if(builderSelected.size&&confirm('למחוק '+builderSelected.size+' פריטים?')){await builderBulk('delete');builderSelected.clear();renderBuilder()}});
  $$('[data-align]').forEach(x=>x.addEventListener('click',()=>builderBulk('align',{mode:x.dataset.align})));$('#distX')?.addEventListener('click',()=>builderBulk('distribute',{axis:'x'}));$('#distY')?.addEventListener('click',()=>builderBulk('distribute',{axis:'y'}));
  $('#undoBuilder')?.addEventListener('click',async()=>{if(!builderUndo.length)return toast('אין פעולה לביטול');builderRedo.push(builderSnapshot());await builderRestore(builderUndo.pop());toast('הפעולה בוטלה')});$('#redoBuilder')?.addEventListener('click',async()=>{if(!builderRedo.length)return toast('אין פעולה להחזרה');builderUndo.push(builderSnapshot());await builderRestore(builderRedo.pop());toast('הפעולה הוחזרה')});
- let canvas=$('#builderCanvas');canvas?.addEventListener('click',e=>{if(builderSuppressClick){builderSuppressClick=false;return}builderCanvasAction(e)});canvas?.addEventListener('pointerdown',builderStartBox);canvas?.addEventListener('pointermove',builderMoveBox);canvas?.addEventListener('pointerup',builderEndBox);
+ let canvas=$('#builderCanvas');canvas?.addEventListener('click',e=>{if(['hallshape','hallerase'].includes(builderTool))return;if(builderSuppressClick){builderSuppressClick=false;return}builderCanvasAction(e)});canvas?.addEventListener('pointerdown',e=>{if(!hallDrawPointerDown(e))builderStartBox(e)});canvas?.addEventListener('pointermove',e=>{hallDrawPointerMove(e);builderMoveBox(e)});canvas?.addEventListener('pointerup',e=>{hallDrawPointerUp(e);builderEndBox(e)});
  document.addEventListener('keydown',e=>{if($('.view.active')?.id!=='view-builder')return;let k=e.key.toLowerCase();if(e.key==='Delete'&&builderSelected.size){e.preventDefault();$('#deleteSelected').click()}if((e.ctrlKey||e.metaKey)&&k==='a'){e.preventDefault();$('#selectAll').click()}if((e.ctrlKey||e.metaKey)&&k==='d'){e.preventDefault();$('#duplicateSelected').click()}if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();$('#undoBuilder').click()}if((e.ctrlKey||e.metaKey)&&k==='y'){e.preventDefault();$('#redoBuilder').click()}});
  builderSetTool('select')
 }
