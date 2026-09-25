@@ -78,7 +78,7 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
 
 
 /* ===== Hall Builder V11 — room-assignment drafting board ===== */
-#builderCanvas.room-grid{position:relative!important;width:780px!important;height:480px!important;min-width:780px!important;min-height:480px!important;max-width:none!important;overflow:hidden!important;direction:rtl;background-color:#f8fafc!important;background-size:30px 30px!important;background-image:linear-gradient(to left,#cbd5e1 1px,transparent 1px),linear-gradient(to bottom,#cbd5e1 1px,transparent 1px)!important}
+#builderCanvas.room-grid{--grid-cell:30px;position:relative!important;width:calc(26 * var(--grid-cell))!important;height:calc(16 * var(--grid-cell))!important;min-width:calc(26 * var(--grid-cell))!important;min-height:calc(16 * var(--grid-cell))!important;max-width:none!important;overflow:hidden!important;direction:rtl;background-color:#f8fafc!important;background-size:var(--grid-cell) var(--grid-cell)!important;background-image:linear-gradient(to left,#cbd5e1 1px,transparent 1px),linear-gradient(to bottom,#cbd5e1 1px,transparent 1px)!important}
 .dark #builderCanvas.room-grid{background-color:#101827!important;background-image:linear-gradient(to left,#34445a 1px,transparent 1px),linear-gradient(to bottom,#34445a 1px,transparent 1px)!important}
 .hall-plan-frame{overflow:auto!important;direction:rtl}.map-column{min-width:0}
 #builderCanvas .grid-item,#builderCanvas .hall-object{position:absolute!important;box-sizing:border-box!important;margin:0!important;transform:none!important;min-width:0!important;min-height:0!important;display:flex!important;align-items:center;justify-content:center}
@@ -101,3 +101,11 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
 #draftBand.bad{border-color:#dc2626!important;background:#dc262622!important}
 #draftBand[data-kind="round"]{border-radius:50%!important}
 #selectionBox{z-index:50!important}
+
+.grid-size-control{display:grid!important;grid-template-columns:auto 1fr auto!important;gap:8px!important;align-items:center!important}
+.grid-size-control input[type="range"]{min-width:90px;width:100%;padding:0!important}
+.grid-size-control output{font-variant-numeric:tabular-nums;font-weight:800;min-width:42px;text-align:left}
+.grid-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:7px}
+.grid-presets button{border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:6px 3px;font:inherit;font-size:11px;cursor:pointer}
+.grid-presets button.active{border-color:#1682e6;background:#e7f3ff;color:#0866b8;font-weight:800}
+.compact-hint{font-size:11px!important;margin:7px 0!important;line-height:1.45}
