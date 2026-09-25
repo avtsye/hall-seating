@@ -145,6 +145,17 @@ $('#tCustomRank')?.addEventListener('change',e=>{$('#tRank').disabled=!e.target.
 $('#projectSettingsBtn')?.addEventListener('click',()=>{let s=P.settings||{};$('#prefMode').value=s.seat_preference||'front_center';$('#frontWeight').value=s.front_weight??1;$('#centerWeight').value=s.center_weight??.35;$('#showQuality').checked=!!s.show_quality;$('#assignmentZoom').value=String(s.assignment_zoom??1);$('#projectSettingsDlg').showModal()});
 $('#saveProjectSettings')?.addEventListener('click',async()=>{let d=await api('/api/project/settings',json('POST',{seat_preference:$('#prefMode').value,front_weight:Number($('#frontWeight').value),center_weight:Number($('#centerWeight').value),show_quality:$('#showQuality').checked,assignment_zoom:Number($('#assignmentZoom').value)}));use(d);$('#projectSettingsDlg').close();toast('הגדרות הפרויקט נשמרו')});
 
+function effectiveRankJS(t){
+ if(!t)return 10;
+ if(t.custom_rank)return Number(t.rank??10);
+ let s=P?.settings||{},mode=s.seat_preference||'front_center',fw=Number(s.front_weight??1),cw=Number(s.center_weight??.35);
+ let front=Math.max(0,Math.min(100,Number(t.y??50)))/10;
+ let center=Math.abs(Math.max(0,Math.min(100,Number(t.x??50)))-50)/5;
+ if(mode==='front_only')return front;
+ if(mode==='center_only')return center;
+ if(mode==='manual')return Number(t.rank??10);
+ return front*fw+center*cw;
+}
 function seatIconClass(t){if(t?.bench_id)return'bench';if(t?.kind==='seat'||t?.shape==='chair')return'chair';return t?.shape==='square'?'square':'round'}
 function seatIcon(t){if(t?.bench_id)return'▥';if(t?.kind==='seat'||t?.shape==='chair')return'♙';return t?.shape==='square'?'▣':'●'}
 let assignmentZoom=1,qualityVisible=false;
