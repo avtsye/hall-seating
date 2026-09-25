@@ -284,6 +284,7 @@ def clear_layout():
 @app.post('/api/layout/generate')
 def generate_layout():
     p=project(); d=request.get_json(force=True)
+    gcols=max(5,int(p.get('settings',{}).get('grid_cols',26))); grows=max(5,int(p.get('settings',{}).get('grid_rows',16)))
     mode=d.get('mode','rows'); rows=max(1,min(30,int(d.get('rows',5)))); cols=max(1,min(30,int(d.get('cols',8))))
     cap=max(1,min(30,int(d.get('capacity',4))))
     if any(x.get('locked') and x.get('table_id') for x in p['people']):
@@ -294,13 +295,15 @@ def generate_layout():
         p['hall']['seating_type']='rows'
         for r in range(rows):
             for col in range(cols):
-                p['tables'].append({'id':uid('t'),'name':f'שורה {r+1} · כיסא {col+1}','x':7+(86*(col/(max(1,cols-1)))),'y':10+(82*(r/(max(1,rows-1)))),'capacity':1,'rank':round(1+r+abs(col-(cols-1)/2)*.08,2),'custom_rank':False,'locked':False,'kind':'seat','shape':'chair','rotation':0,'w':0,'h':0})
+                gx=round((gcols-1)*(col/(max(1,cols-1)))); gy=round((grows-1)*(r/(max(1,rows-1))))
+                p['tables'].append({'id':uid('t'),'name':f'שורה {r+1} · כיסא {col+1}','x':(gx+.5)/gcols*100,'y':(gy+.5)/grows*100,'capacity':1,'rank':round(1+r+abs(col-(cols-1)/2)*.08,2),'custom_rank':False,'locked':False,'kind':'seat','shape':'chair','rotation':0,'w':100/gcols,'h':100/grows,'gx':gx,'gy':gy,'gw':1,'gh':1,'zone':'','tags':[],'disabled':False})
     else:
         p['hall']['seating_type']='square_tables' if mode=='square' else 'round_tables'
         shape='square' if mode=='square' else 'round'
         for r in range(rows):
             for col in range(cols):
-                p['tables'].append({'id':uid('t'),'name':f'שולחן {r*cols+col+1}','x':8+(84*(col/(max(1,cols-1)))),'y':12+(78*(r/(max(1,rows-1)))),'capacity':cap,'rank':round(1+r+abs(col-(cols-1)/2)*.3,2),'custom_rank':False,'locked':False,'kind':'table','shape':shape,'rotation':0,'w':0,'h':0})
+                gx=round((gcols-1)*(col/(max(1,cols-1)))); gy=round((grows-1)*(r/(max(1,rows-1))))
+                p['tables'].append({'id':uid('t'),'name':f'שולחן {r*cols+col+1}','x':(gx+.5)/gcols*100,'y':(gy+.5)/grows*100,'capacity':cap,'rank':round(1+r+abs(col-(cols-1)/2)*.3,2),'custom_rank':False,'locked':False,'kind':'table','shape':shape,'rotation':0,'w':100/gcols,'h':100/grows,'gx':gx,'gy':gy,'gw':1,'gh':1,'zone':'','tags':[],'disabled':False})
     touch(p); return state()
 
 @app.post('/api/tables/bulk')
