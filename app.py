@@ -242,6 +242,8 @@ def edit_table(tid):
         if k in d:t[k]=str(d[k])
     for k in ('x','y','rank','rotation','w','h'):
         if k in d:t[k]=float(d[k])
+    for k in ('gx','gy','gw','gh'):
+        if k in d:t[k]=int(d[k])
     if 'capacity' in d:
         cap=max(1,int(d['capacity'])); occ=occupants(p,tid)
         if len(occ)>cap:return jsonify(error='יש יותר משובצים מהקיבולת החדשה'),400
@@ -306,8 +308,14 @@ def bulk_tables():
         p['tables']=[t for t in p['tables'] if t['id'] not in ids]
         p['rules']=[r for r in p['rules'] if r.get('table_id') not in ids]
     elif action=='move':
-        dx=float(d.get('dx',0));dy=float(d.get('dy',0))
-        for t in items:t['x']=max(1,min(99,float(t.get('x',50))+dx));t['y']=max(1,min(99,float(t.get('y',50))+dy))
+        dx=float(d.get('dx',0));dy=float(d.get('dy',0));gdx=int(d.get('grid_dx',0));gdy=int(d.get('grid_dy',0))
+        for t in items:
+            if t.get('gx') is not None:
+                gw=max(1,int(t.get('gw',1)));gh=max(1,int(t.get('gh',1)))
+                t['gx']=max(0,min(60-gw,int(t.get('gx',0))+gdx));t['gy']=max(0,min(40-gh,int(t.get('gy',0))+gdy))
+                t['x']=(t['gx']+gw/2)/60*100;t['y']=(t['gy']+gh/2)/40*100
+            else:
+                t['x']=max(1,min(99,float(t.get('x',50))+dx));t['y']=max(1,min(99,float(t.get('y',50))+dy))
     elif action=='align':
         mode=d.get('mode')
         if mode in ('left','right','hcenter'):
@@ -325,7 +333,12 @@ def bulk_tables():
     elif action=='duplicate':
         new=[]
         for t in items:
-            n=copy.deepcopy(t);n['id']=uid('t');n['name']=str(t.get('name','פריט'))+' עותק';n['x']=min(98,t['x']+3);n['y']=min(97,t['y']+3);new.append(n)
+            n=copy.deepcopy(t);n['id']=uid('t');n['name']=str(t.get('name','פריט'))+' עותק';n['x']=min(98,t['x']+3);n['y']=min(97,t['y']+3)
+            if n.get('gx') is not None:
+                n['gx']=min(60-int(n.get('gw',1)),int(n['gx'])+2);n['gy']=min(40-int(n.get('gh',1)),int(n['gy'])+2)
+                n['x']=(n['gx']+int(n.get('gw',1))/2)/60*100;n['y']=(n['gy']+int(n.get('gh',1))/2)/40*100
+            if n.get('bench_id'):n['bench_id']=uid('bench')
+            new.append(n)
         p['tables'].extend(new)
     elif action=='rotate':
         deg=float(d.get('degrees',90))
@@ -399,6 +412,11 @@ def edit_hall_object(oid):
     if 'name' in d:o['name']=str(d['name'])
     for k in ('x','y','w','h','rotation'):
         if k in d:o[k]=float(d[k])
+    for k in ('gx','gy','gw','gh'):
+        if k in d:o[k]=int(d[k])
+    if o.get('gx') is not None:
+        o['x']=(o['gx']+int(o.get('gw',1))/2)/60*100;o['y']=(o['gy']+int(o.get('gh',1))/2)/40*100
+        o['w']=int(o.get('gw',1))/60*100;o['h']=int(o.get('gh',1))/40*100
     touch(p);return state()
 @app.delete('/api/hall-objects/<oid>')
 def delete_hall_object(oid):
