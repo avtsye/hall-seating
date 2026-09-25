@@ -190,10 +190,13 @@ function assignmentTooltip(t,occ){
  let rows=occ.length?occ.map(x=>'<div><b>'+esc(x.name)+'</b>'+(x.seat!=null?' <span>· מקום '+(x.seat+1)+'</span>':'')+'</div>').join(''):'<div class="empty-tip">פנוי</div>';
  return '<div class="seat-tooltip"><strong>'+esc(t.name)+'</strong>'+rows+'</div>';
 }
+let displayZoom=.5;
+function setDisplayZoom(value){displayZoom=Math.max(.1,Math.min(1.5,Number(value)||1));let canvas=$('#displayCanvas'),stage=$('#displayZoomStage'),range=$('#displayZoomRange'),label=$('#displayZoomLabel');if(!canvas||!stage)return;let w=GRID_COLS*CELL,h=GRID_ROWS*CELL;canvas.style.transform='scale('+displayZoom+')';canvas.style.transformOrigin='top right';stage.style.width=(w*displayZoom)+'px';stage.style.height=(h*displayZoom)+'px';if(range)range.value=Math.round(displayZoom*100);if(label)label.textContent=Math.round(displayZoom*100)+'%'}
+function fitDisplayZoom(){let sc=$('#displayScroll');if(!sc)return;let natural=GRID_COLS*CELL,available=Math.max(1,sc.clientWidth-8);setDisplayZoom(Math.max(.1,Math.min(1.5,available/natural)))}
 function renderDisplayMap(){
  let h=$('#displayCanvas');if(!h||!P)return;h.innerHTML='';commonMapSetup(h);P.hall_objects??=[];
  renderMergedHallObjects(h);
- P.tables.forEach((t,index)=>{let occ=P.people.filter(x=>x.table_id===t.id).sort((a,b)=>(a.seat??0)-(b.seat??0)),d=document.createElement('div');d.className='display-seat '+seatIconClass(t);commonMapStyle(d,gridRect(t));let number=esc(t.name||('מקום '+(index+1)));let names=occ.length?occ.map(x=>esc(x.name)).join('<br>'):'<span class="display-empty">פנוי</span>';d.innerHTML='<div class="display-number">'+number+'</div><div class="display-person">'+names+'</div>'+displaySeatTooltip(t,occ);d.tabIndex=0;d.setAttribute('role','button');d.setAttribute('aria-label',(t.name||'מקום')+(occ.length?' - '+occ.map(x=>x.name).join(', '):' - פנוי'));d.onclick=()=>openDisplaySeat(t.id);d.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openDisplaySeat(t.id)}};h.appendChild(d)})
+ P.tables.forEach((t,index)=>{let occ=P.people.filter(x=>x.table_id===t.id).sort((a,b)=>(a.seat??0)-(b.seat??0)),d=document.createElement('div');d.className='display-seat '+seatIconClass(t);commonMapStyle(d,gridRect(t));let number=esc(t.name||('מקום '+(index+1)));let names=occ.length?occ.map(x=>esc(x.name)).join('<br>'):'<span class="display-empty">פנוי</span>';d.innerHTML='<div class="display-number">'+number+'</div><div class="display-person">'+names+'</div>'+displaySeatTooltip(t,occ);d.tabIndex=0;d.setAttribute('role','button');d.setAttribute('aria-label',(t.name||'מקום')+(occ.length?' - '+occ.map(x=>x.name).join(', '):' - פנוי'));d.onclick=()=>openDisplaySeat(t.id);d.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openDisplaySeat(t.id)}};h.appendChild(d)});setDisplayZoom(displayZoom)
 }
 
 function displaySeatTooltip(t,occ){let rows=occ.length?occ.map(x=>'<div class="display-tip-person"><b>'+esc(x.name)+'</b>'+(group(x.group_id)?'<span>'+esc(group(x.group_id).name)+'</span>':'')+(x.note?'<small>'+esc(x.note)+'</small>':'')+'</div>').join(''):'<div class="empty-tip">המקום פנוי</div>';return '<div class="seat-tooltip display-tooltip"><strong>'+esc(t.name||'מקום')+'</strong>'+rows+'<small class="tip-action">לחץ לפרטים ועריכה</small></div>'}
@@ -208,4 +211,8 @@ $('#validateProject')?.addEventListener('click',async()=>{let d=await api('/api/
 function openPersonPrefs(id){let x=P.people.find(p=>p.id===id);if(!x)return;$('#editPersonId').value=id;$('#personPrefZone').value=x.preferred_zone||'';$('#personPrefTags').value=(x.preferred_tags||[]).join(', ');$('#personSeatPref').value=x.seat_preference||'project';$('#personNote').value=x.note||'';$('#personDlg').showModal()}
 $('#savePersonPrefs')?.addEventListener('click',async()=>{let id=$('#editPersonId').value;use(await api('/api/people/'+id,json('PATCH',{preferred_zone:$('#personPrefZone').value,preferred_tags:$('#personPrefTags').value.split(',').map(x=>x.trim()).filter(Boolean),seat_preference:$('#personSeatPref').value,note:$('#personNote').value})));$('#personDlg').close();toast('ההעדפות נשמרו')});
 
+$('#displayZoomRange')?.addEventListener('input',e=>setDisplayZoom(Number(e.target.value)/100));
+$('#displayZoomIn')?.addEventListener('click',()=>setDisplayZoom(displayZoom+.05));
+$('#displayZoomOut')?.addEventListener('click',()=>setDisplayZoom(displayZoom-.05));
+$('#displayZoomFit')?.addEventListener('click',fitDisplayZoom);
 $('#printDisplay')?.addEventListener('click',()=>window.print());
