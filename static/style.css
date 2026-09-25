@@ -132,3 +132,15 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
 #builderCanvas .grid-item.kind-bench .item-symbol{
   overflow:hidden!important;
 }
+
+/* Seating items occupy exactly one visible grid square and never sit between cells. */
+#builderCanvas.room-grid .builder-item.grid-item{
+  width:var(--grid-cell)!important;
+  height:var(--grid-cell)!important;
+  max-width:var(--grid-cell)!important;
+  max-height:var(--grid-cell)!important;
+  min-width:var(--grid-cell)!important;
+  min-height:var(--grid-cell)!important;
+  box-sizing:border-box!important;
+  margin:0!important;
+}
