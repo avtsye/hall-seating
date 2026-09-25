@@ -144,3 +144,14 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
   box-sizing:border-box!important;
   margin:0!important;
 }
+
+/* V12: room-assignment editor interaction, adapted to hall items */
+#builderCanvas.room-grid{touch-action:pan-x pan-y;user-select:none;-webkit-user-select:none}
+#builderCanvas.tool-paint{cursor:crosshair}
+#builderCanvas.tool-erase{cursor:not-allowed}
+#builderCanvas.tool-move{cursor:grab}
+#builderCanvas .builder-item,#builderCanvas .hall-object{pointer-events:none!important}
+#builderCanvas .builder-item.grid-item{width:auto!important;height:auto!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important}
+#builderCanvas .kind-chair,#builderCanvas .kind-bench{border-radius:5px!important}
+#draftBand{border-radius:8px!important}
+#draftBand[data-kind="erase"]{border-color:#dc2626!important;background:#dc26261f!important}
