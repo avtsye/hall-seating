@@ -181,9 +181,8 @@ function seatIcon(t){if(t?.bench_id)return'▥';if(t?.kind==='seat'||t?.shape===
 let assignmentZoom=1,qualityVisible=false;
 function qualityClass(t){let r=effectiveRankJS(t);return r<=3?'quality-best':r<=6?'quality-good':r<=9?'quality-mid':'quality-low'}
 function renderAssignmentPro(){
- let h=$('#assignCanvas');if(!h||!P)return;h.innerHTML='';commonMapSetup(h);P.hall_objects??=[];
- P.hall_objects.forEach(o=>{let z=document.createElement('div');z.className='hall-object object-'+(o.kind||'zone');commonMapStyle(z,gridRect(o));z.innerHTML='<span>'+esc(o.name||'')+'</span>';h.appendChild(z)});
- P.tables.forEach(t=>{let occ=P.people.filter(x=>x.table_id===t.id),d=document.createElement('div');d.className='assign-slot unified-assign-slot '+seatIconClass(t)+(qualityVisible?' '+qualityClass(t):'')+(t.disabled?' disabled-seat':'');commonMapStyle(d,gridRect(t));let names=occ.map(x=>esc(x.name)).join(' · ');d.innerHTML='<div class="assign-icon '+seatIconClass(t)+'">'+seatIcon(t)+'</div><div class="assign-name">'+esc(t.name)+'</div><div class="assign-occupants">'+(names||'פנוי')+'</div><div class="assign-meta">'+(t.zone?'📍 '+esc(t.zone)+' · ':'')+'איכות '+effectiveRankJS(t).toFixed(1)+'</div>'+assignmentTooltip(t,occ);d.title=(t.tags||[]).join(', ');d.onclick=()=>openTable(t.id);occ.length&&d.addEventListener('dblclick',async()=>{let x=occ[0],z=await api('/api/explain/'+x.id);$('#explainTitle').textContent='למה '+z.title+' שובץ כאן?';$('#explainBody').innerHTML=z.lines.map(a=>'<div class="explain-line">'+esc(a)+'</div>').join('');$('#explainDlg').showModal()});h.appendChild(d)});
+ let h=$('#assignCanvas');if(!h||!P)return;h.innerHTML='';commonMapSetup(h);P.hall_objects??=[];renderMergedHallObjects(h);
+ P.tables.forEach(t=>{let occ=P.people.filter(x=>x.table_id===t.id),d=document.createElement('div');d.className='assign-slot unified-assign-slot '+seatIconClass(t)+(qualityVisible?' '+qualityClass(t):'')+(t.disabled?' disabled-seat':'');commonMapStyle(d,gridRect(t));let names=occ.map(x=>esc(x.name)).join(' · ');d.innerHTML='<div class="assign-compact-icon">'+seatIcon(t)+'</div><div class="assign-compact-name">'+esc(t.name)+'</div><div class="assign-compact-occ">'+(names||'פנוי')+'</div>'+assignmentTooltip(t,occ);d.title=(t.tags||[]).join(', ');d.onclick=()=>openTable(t.id);occ.length&&d.addEventListener('dblclick',async()=>{let x=occ[0],z=await api('/api/explain/'+x.id);$('#explainTitle').textContent='למה '+z.title+' שובץ כאן?';$('#explainBody').innerHTML=z.lines.map(a=>'<div class="explain-line">'+esc(a)+'</div>').join('');$('#explainDlg').showModal()});h.appendChild(d)});
  assignmentZoom=Number(P.settings?.assignment_zoom??1);applyAssignZoom()
 }
 function applyAssignZoom(){let h=$('#assignCanvas');if(!h)return;h.style.transform='scale('+assignmentZoom+')';h.style.transformOrigin='top right';$('#zoomLabel').textContent=Math.round(assignmentZoom*100)+'%'}
@@ -193,7 +192,7 @@ function assignmentTooltip(t,occ){
 }
 function renderDisplayMap(){
  let h=$('#displayCanvas');if(!h||!P)return;h.innerHTML='';commonMapSetup(h);P.hall_objects??=[];
- P.hall_objects.forEach(o=>{let z=document.createElement('div');z.className='hall-object object-'+(o.kind||'zone');commonMapStyle(z,gridRect(o));z.innerHTML='<span>'+esc(o.name||'')+'</span>';h.appendChild(z)});
+ renderMergedHallObjects(h);
  P.tables.forEach((t,index)=>{let occ=P.people.filter(x=>x.table_id===t.id).sort((a,b)=>(a.seat??0)-(b.seat??0)),d=document.createElement('div');d.className='display-seat '+seatIconClass(t);commonMapStyle(d,gridRect(t));let number=esc(t.name||('מקום '+(index+1)));let names=occ.length?occ.map(x=>esc(x.name)).join('<br>'):'<span class="display-empty">פנוי</span>';d.innerHTML='<div class="display-number">'+number+'</div><div class="display-person">'+names+'</div>';h.appendChild(d)})
 }
 
