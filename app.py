@@ -124,7 +124,7 @@ def add_table():
     p=project(); d=request.get_json(force=True)
     t={'id':uid('t'),'name':(d.get('name') or f"שולחן {len(p['tables'])+1}").strip(),
        'x':float(d.get('x',50)),'y':float(d.get('y',50)),'capacity':max(1,int(d.get('capacity',4))),
-       'rank':float(d.get('rank',10)),'custom_rank':True,'locked':False,'kind':d.get('kind','table'),'shape':d.get('shape','round')}
+       'rank':float(d.get('rank',10)),'custom_rank':True,'locked':False,'kind':d.get('kind','table'),'shape':d.get('shape','round'),'rotation':float(d.get('rotation',0)),'w':float(d.get('w',0)),'h':float(d.get('h',0))}
     p['tables'].append(t); touch(p); return state()
 @app.patch('/api/tables/<tid>')
 def edit_table(tid):
@@ -134,7 +134,7 @@ def edit_table(tid):
     if 'name' in d:t['name']=str(d['name']).strip()
     for k in ('kind','shape'):
         if k in d:t[k]=str(d[k])
-    for k in ('x','y','rank'):
+    for k in ('x','y','rank','rotation','w','h'):
         if k in d:t[k]=float(d[k])
     if 'capacity' in d:
         cap=max(1,int(d['capacity'])); occ=occupants(p,tid)
@@ -182,6 +182,46 @@ def generate_layout():
             for col in range(cols):
                 p['tables'].append({'id':uid('t'),'name':f'שולחן {r*cols+col+1}','x':8+(84*(col/(max(1,cols-1)))),'y':12+(78*(r/(max(1,rows-1)))),'capacity':cap,'rank':round(1+r+abs(col-(cols-1)/2)*.3,2),'custom_rank':False,'locked':False,'kind':'table','shape':shape})
     touch(p); return state()
+
+@app.post('/api/tables/bulk')
+def bulk_tables():
+    p=project(); d=request.get_json(force=True); ids=set(d.get('ids',[])); action=d.get('action')
+    items=[t for t in p['tables'] if t['id'] in ids]
+    if not items:return jsonify(error='לא נבחרו פריטים'),400
+    if action=='delete':
+        locked=[x for x in p['people'] if x.get('table_id') in ids and x.get('locked')]
+        if locked:return jsonify(error='יש אנשים נעולים בפריטים שנבחרו'),400
+        for x in p['people']:
+            if x.get('table_id') in ids:x['table_id']=None;x['seat']=None
+        p['tables']=[t for t in p['tables'] if t['id'] not in ids]
+        p['rules']=[r for r in p['rules'] if r.get('table_id') not in ids]
+    elif action=='move':
+        dx=float(d.get('dx',0));dy=float(d.get('dy',0))
+        for t in items:t['x']=max(1,min(99,float(t.get('x',50))+dx));t['y']=max(1,min(99,float(t.get('y',50))+dy))
+    elif action=='align':
+        mode=d.get('mode')
+        if mode in ('left','right','hcenter'):
+            val=min(t['x'] for t in items) if mode=='left' else max(t['x'] for t in items) if mode=='right' else sum(t['x'] for t in items)/len(items)
+            for t in items:t['x']=val
+        elif mode in ('top','bottom','vcenter'):
+            val=min(t['y'] for t in items) if mode=='top' else max(t['y'] for t in items) if mode=='bottom' else sum(t['y'] for t in items)/len(items)
+            for t in items:t['y']=val
+    elif action=='distribute':
+        axis=d.get('axis','x')
+        key='x' if axis=='x' else 'y'; ordered=sorted(items,key=lambda t:t[key])
+        if len(ordered)>2:
+            start=ordered[0][key];end=ordered[-1][key];step=(end-start)/(len(ordered)-1)
+            for i,t in enumerate(ordered):t[key]=start+i*step
+    elif action=='duplicate':
+        new=[]
+        for t in items:
+            n=copy.deepcopy(t);n['id']=uid('t');n['name']=str(t.get('name','פריט'))+' עותק';n['x']=min(98,t['x']+3);n['y']=min(97,t['y']+3);new.append(n)
+        p['tables'].extend(new)
+    elif action=='rotate':
+        deg=float(d.get('degrees',90))
+        for t in items:t['rotation']=(float(t.get('rotation',0))+deg)%360
+    else:return jsonify(error='פעולה לא מוכרת'),400
+    touch(p);return state()
 
 @app.post('/api/groups')
 def add_group():
