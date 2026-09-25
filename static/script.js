@@ -46,49 +46,93 @@ $('#themeBtn').onclick=()=>{document.body.classList.toggle('dark');localStorage.
 if(localStorage.theme==='dark')document.body.classList.add('dark');
 function use(d){S=d.state;P=d.project;V=d.violations||[];render()}
 
-/* ===== Hall Builder V11 — ported from the room-assignment drafting logic =====
-   Same interaction model as the uploaded room system:
-   fixed drafting cells, RTL coordinates, rectangle drag OR two-corner clicks,
-   move as a whole footprint, and a single rubber-band preview. */
+/* ===== Hall Builder V12 — same drafting engine as room assignment ===== */
 const GRID_COLS=26,GRID_ROWS=16;let CELL=clampGridPx(localStorage.getItem('hallBuilderGridPx')||30);
-let builderTool='select',builderLayout='round_tables',builderSelected=new Set(),builderUndo=[],builderRedo=[];
-let draft=null,draftAnchor=null,selectBox=null,suppressClick=false;
 function clampGridPx(v){return Math.max(16,Math.min(60,Math.round(+v||30)))}
 const clampI=(v,lo,hi)=>Math.max(lo,Math.min(hi,Math.round(+v||0)));
+let builderTool='move',builderLayout='round_tables',builderSelected=new Set(),builderUndo=[],builderRedo=[];
+let down=null,anchor=null;
 const rectCells=(a,b)=>{let out=[];for(let y=Math.min(a.y,b.y);y<=Math.max(a.y,b.y);y++)for(let x=Math.min(a.x,b.x);x<=Math.max(a.x,b.x);x++)out.push({x,y});return out};
 function gridRect(t){if(t.gx!=null)return{gx:+t.gx,gy:+t.gy,gw:+(t.gw||1),gh:+(t.gh||1)};let gw=Math.max(1,Math.round((+t.w||100/GRID_COLS)/100*GRID_COLS)),gh=Math.max(1,Math.round((+t.h||100/GRID_ROWS)/100*GRID_ROWS));return{gx:clampI((+t.x/100)*GRID_COLS-gw/2,0,GRID_COLS-gw),gy:clampI((+t.y/100)*GRID_ROWS-gh/2,0,GRID_ROWS-gh),gw,gh}}
-function gridStyle(el,r){el.style.right=(r.gx*CELL)+'px';el.style.top=(r.gy*CELL)+'px';el.style.width=(r.gw*CELL)+'px';el.style.height=(r.gh*CELL)+'px';el.style.left='auto'}
+function cellSquares(r){let a=[];for(let y=r.gy;y<r.gy+r.gh;y++)for(let x=r.gx;x<r.gx+r.gw;x++)a.push({x,y});return a}
+function cellsClash(a,b){return !(a.gx+a.gw<=b.gx||b.gx+b.gw<=a.gx||a.gy+a.gh<=b.gy||b.gy+b.gh<=a.gy)}
+function gridStyle(el,r){el.style.right=(r.gx*CELL+1)+'px';el.style.top=(r.gy*CELL+1)+'px';el.style.width=(r.gw*CELL-2)+'px';el.style.height=(r.gh*CELL-2)+'px';el.style.left='auto'}
 function applyGridDisplaySize(v,save=true){CELL=clampGridPx(v);if(save)localStorage.setItem('hallBuilderGridPx',CELL);let canvas=$('#builderCanvas');if(canvas){canvas.style.setProperty('--grid-cell',CELL+'px');canvas.style.width=(GRID_COLS*CELL)+'px';canvas.style.height=(GRID_ROWS*CELL)+'px';canvas.style.minWidth=(GRID_COLS*CELL)+'px';canvas.style.minHeight=(GRID_ROWS*CELL)+'px'}let input=$('#gridCellSize'),out=$('#gridCellSizeValue');if(input)input.value=CELL;if(out)out.value=out.textContent=CELL+'px';$$('[data-grid-px]').forEach(b=>b.classList.toggle('active',+b.dataset.gridPx===CELL));if(P)renderBuilder()}
-function cellAt(e){let r=$('#builderCanvas').getBoundingClientRect();return{x:clampI(Math.floor((r.right-e.clientX)/CELL),0,GRID_COLS-1),y:clampI(Math.floor((e.clientY-r.top)/CELL),0,GRID_ROWS-1)}}
+function cellXY(e){let r=$('#builderCanvas').getBoundingClientRect();return{x:clampI(Math.floor((r.right-e.clientX)/CELL),0,GRID_COLS-1),y:clampI(Math.floor((e.clientY-r.top)/CELL),0,GRID_ROWS-1)}}
 function gridArea(a,b){return{gx:Math.min(a.x,b.x),gy:Math.min(a.y,b.y),gw:Math.abs(a.x-b.x)+1,gh:Math.abs(a.y-b.y)+1}}
 function builderSnapshot(){return JSON.stringify({tables:structuredClone(P.tables||[]),hall_objects:structuredClone(P.hall_objects||[]),assignments:(P.people||[]).map(x=>({id:x.id,table_id:x.table_id,seat:x.seat}))})}
 function remember(){builderUndo.push(builderSnapshot());if(builderUndo.length>50)builderUndo.shift();builderRedo=[]}
 async function restore(raw){use(await api('/api/layout/restore',json('POST',JSON.parse(raw))))}
-function setBuilderHint(t){let n=$('#builderHintText');if(n)n.textContent=t}
-const IDLE_HINT='גוררים מלבן — או לוחצים על פינה אחת ואז על הפינה הנגדית. בדיוק כמו בעורך שיבוץ החדרים.';
-function hideDraft(){let b=$('#draftBand');if(b)b.style.display='none'}
-function showDraft(a,b,bad=false){let band=$('#draftBand');band.style.display='block';gridStyle(band,gridArea(a,b));band.classList.toggle('bad',bad);band.dataset.kind=builderTool}
-function dropAnchor(){draftAnchor=null;hideDraft();setBuilderHint(IDLE_HINT)}
-function setTool(tool){builderTool=tool;draft=null;dropAnchor();$$('[data-tool]').forEach(x=>x.classList.toggle('selected',x.dataset.tool===tool));$('#builderCanvas').dataset.tool=tool;$('#benchOptions').style.display=tool==='bench'?'block':'none'}
-function builderSetLayout(layout){builderLayout=layout;$$$('.layout-card').forEach(x=>x.classList.toggle('selected',x.dataset.layout===layout));$('#genCapWrap').style.display=layout==='rows'?'none':''}
+const IDLE_HINT='📐 גוררים מלבן — או לוחצים על פינה אחת ואז על הפינה הנגדית.';
+function setHint(t){let n=$('#builderHintText');if(n)n.textContent=t}
+function bandShow(a,b,bad=false){let el=$('#draftBand'),r=gridArea(a,b);el.style.display='block';gridStyle(el,r);el.classList.toggle('bad',bad);el.dataset.kind=builderTool}
+function bandHide(){let el=$('#draftBand');if(el)el.style.display='none'}
+function dropAnchor(){anchor=null;bandHide();setHint(IDLE_HINT)}
+function setTool(tool){dropAnchor();down=null;builderTool=tool;$$('[data-tool]').forEach(x=>x.classList.toggle('selected',x.dataset.tool===tool));$('#builderCanvas').className='hall builder-canvas room-grid tool-'+(tool==='move'?'move':tool==='erase'?'erase':'paint');$('#builderCanvas').dataset.tool=tool;$('#benchOptions').style.display=tool==='bench'?'block':'none';renderBuilder()}
+function builderSetLayout(layout){builderLayout=layout;$$('.layout-card').forEach(x=>x.classList.toggle('selected',x.dataset.layout===layout));$('#genCapWrap').style.display=layout==='rows'?'none':''}
+function allItems(){return [...(P.tables||[]).map(x=>({type:'table',id:x.id,r:gridRect(x),obj:x})),...(P.hall_objects||[]).map(x=>({type:'object',id:x.id,r:gridRect(x),obj:x}))]}
+function itemAt(p){let all=allItems();for(let i=all.length-1;i>=0;i--){let r=all[i].r;if(p.x>=r.gx&&p.x<r.gx+r.gw&&p.y>=r.gy&&p.y<r.gy+r.gh)return all[i]}return null}
+function selectionInfo(){let e=$('#selectionInfo');if(e)e.textContent=builderSelected.size?builderSelected.size+' פריטים נבחרו':'לא נבחרו פריטים'}
 function icon(t){if(t.bench_id)return'▥';if(t.kind==='seat')return'♙';return t.shape==='square'?'▣':'●'}
 function iconClass(t){if(t.bench_id)return'bench';if(t.kind==='seat')return'chair';return t.shape==='square'?'square':'round'}
-function tableSeatDots(t){if(t.kind==='seat')return'';let n=Math.max(1,Math.min(16,+t.capacity||1));return '<span class="table-seat-ring">'+Array.from({length:n},(_,i)=>'<i style="--i:'+i+';--n:'+n+'"></i>').join('')+'</span>'}
-function selectionInfo(){let e=$('#selectionInfo');if(e)e.textContent=builderSelected.size?builderSelected.size+' פריטים נבחרו':'לא נבחרו פריטים'}
-async function createDraft(a,b){remember();let d=await api('/api/layout/draw',json('POST',{kind:builderTool,...gridArea(a,b),capacity:+$('#genCapacity').value||4}));S=d.state;P=d.project;V=d.violations||[];builderSelected=new Set((d.created||[]).filter(id=>P.tables.some(t=>t.id===id)));render()}
-function draftDown(e){if(builderTool==='select'||e.button!==0||e.target.closest('.builder-item,.hall-object'))return false;let p=cellAt(e);e.preventDefault();e.stopPropagation();if(draftAnchor){let a=draftAnchor;dropAnchor();createDraft(a,p);draft={mode:'done'};return true}draft={start:p,cur:p};showDraft(p,p);try{$('#builderCanvas').setPointerCapture(e.pointerId)}catch{}return true}
-function draftMove(e){if(!draft){if(draftAnchor)showDraft(draftAnchor,cellAt(e));return}if(draft.mode==='done')return;draft.cur=cellAt(e);showDraft(draft.start,draft.cur)}
-function draftUp(e){if(!draft)return;let d=draft;draft=null;if(d.mode==='done'){hideDraft();return}try{$('#builderCanvas').releasePointerCapture(e.pointerId)}catch{}if(d.start.x===d.cur.x&&d.start.y===d.cur.y){draftAnchor=d.start;showDraft(d.start,d.start);setBuilderHint('פינה ראשונה נבחרה. עכשיו לחצו על הפינה הנגדית — או Esc לביטול.');return}hideDraft();createDraft(d.start,d.cur)}
+function tableSeatDots(t){if(t.kind==='seat')return'';return '<span class="table-seat-ring"></span>'}
+async function applyRect(a,b){
+ let area=gridArea(a,b);
+ if(builderTool==='erase'){let hits=allItems().filter(q=>cellsClash(q.r,area));if(!hits.length)return;remember();for(const q of hits){if(q.type==='table')await api('/api/tables/'+q.id,{method:'DELETE'});else await api('/api/hall-objects/'+q.id,{method:'DELETE'})}await load();return}
+ remember();let d=await api('/api/layout/draw',json('POST',{kind:builderTool,...area,capacity:+$('#genCapacity').value||4}));S=d.state;P=d.project;V=d.violations||[];builderSelected=new Set((d.created||[]).filter(id=>P.tables.some(t=>t.id===id)));render()
+}
 function renderBuilder(){let canvas=$('#builderCanvas');if(!canvas||!P)return;P.hall_objects??=[];P.tables??=[];builderSelected=new Set([...builderSelected].filter(id=>P.tables.some(t=>t.id===id)));$('#builderHallName').textContent=P.hall?.name||'האולם';$('#builderCount').textContent=P.tables.length+' פריטי ישיבה · '+P.tables.reduce((a,t)=>a+(+t.capacity||0),0)+' מקומות';canvas.querySelectorAll('.builder-item,.hall-object').forEach(n=>n.remove());let help=canvas.querySelector('.empty-help');if(help)help.style.display=P.tables.length+P.hall_objects.length?'none':'flex';
-P.hall_objects.forEach(o=>{let el=document.createElement('div'),r=gridRect(o);el.className='hall-object object-'+(o.kind||'zone');el.dataset.oid=o.id;gridStyle(el,r);el.innerHTML='<span>'+esc(o.name||'אובייקט')+'</span>';el.ondblclick=async e=>{e.stopPropagation();let n=prompt('שם האובייקט:',o.name||'');if(n!==null)use(await api('/api/hall-objects/'+o.id,json('PATCH',{name:n})))};el.onpointerdown=e=>startObjectDrag(e,el,o);canvas.appendChild(el)});
-P.tables.forEach(t=>{let el=document.createElement('div'),r=gridRect(t);el.className='builder-item grid-item kind-'+iconClass(t)+(builderSelected.has(t.id)?' selected-item':'');el.dataset.bid=t.id;gridStyle(el,r);el.innerHTML='<span class="item-symbol">'+icon(t)+'</span>'+tableSeatDots(t)+'<span class="item-cap">'+(t.kind==='seat'?'':t.capacity)+'</span>';el.onclick=e=>{e.stopPropagation();if(suppressClick){suppressClick=false;return}if(builderTool!=='select')return;if(e.ctrlKey||e.metaKey){builderSelected.has(t.id)?builderSelected.delete(t.id):builderSelected.add(t.id)}else builderSelected=new Set([t.id]);renderBuilder()};el.ondblclick=e=>{e.stopPropagation();openTable(t.id)};el.onpointerdown=e=>startTableDrag(e,el,t);canvas.appendChild(el)});selectionInfo()}
-function startTableDrag(e,el,t){if(builderTool!=='select'||e.button!==0)return;e.stopPropagation();if(!builderSelected.has(t.id))builderSelected=new Set([t.id]);let start=cellAt(e),items=P.tables.filter(x=>builderSelected.has(x.id)).map(x=>({id:x.id,r:gridRect(x)})),last=start,moved=false;try{el.setPointerCapture(e.pointerId)}catch{}el.onpointermove=ev=>{last=cellAt(ev);let dx=last.x-start.x,dy=last.y-start.y;moved ||= !!(dx||dy);items.forEach(q=>{let n=$('#builderCanvas').querySelector('[data-bid="'+q.id+'"]');if(n)gridStyle(n,{...q.r,gx:clampI(q.r.gx+dx,0,GRID_COLS-q.r.gw),gy:clampI(q.r.gy+dy,0,GRID_ROWS-q.r.gh)})})};el.onpointerup=async()=>{el.onpointermove=null;el.onpointerup=null;if(!moved)return renderBuilder();remember();suppressClick=true;use(await api('/api/tables/bulk',json('POST',{ids:[...builderSelected],action:'move',grid_dx:last.x-start.x,grid_dy:last.y-start.y,dx:0,dy:0})))}}
-function startObjectDrag(e,el,o){if(builderTool!=='select'||e.button!==0)return;e.stopPropagation();let start=cellAt(e),r=gridRect(o),last=start,moved=false;try{el.setPointerCapture(e.pointerId)}catch{}el.onpointermove=ev=>{last=cellAt(ev);let dx=last.x-start.x,dy=last.y-start.y;moved ||= !!(dx||dy);gridStyle(el,{...r,gx:clampI(r.gx+dx,0,GRID_COLS-r.gw),gy:clampI(r.gy+dy,0,GRID_ROWS-r.gh)})};el.onpointerup=async()=>{el.onpointermove=null;el.onpointerup=null;if(!moved)return;remember();let nr={...r,gx:clampI(r.gx+last.x-start.x,0,GRID_COLS-r.gw),gy:clampI(r.gy+last.y-start.y,0,GRID_ROWS-r.gh)};use(await api('/api/hall-objects/'+o.id,json('PATCH',nr)))}}
+ P.hall_objects.forEach(o=>{let el=document.createElement('div');el.className='hall-object object-'+(o.kind||'zone');el.dataset.oid=o.id;gridStyle(el,gridRect(o));el.innerHTML='<span>'+esc(o.name||'אובייקט')+'</span>';el.style.pointerEvents='none';canvas.appendChild(el)});
+ P.tables.forEach(t=>{let el=document.createElement('div');el.className='builder-item grid-item kind-'+iconClass(t)+(builderSelected.has(t.id)?' selected-item':'');el.dataset.bid=t.id;gridStyle(el,gridRect(t));el.innerHTML='<span class="item-symbol">'+icon(t)+'</span>'+tableSeatDots(t)+'<span class="item-cap">'+(t.kind==='seat'?'':t.capacity)+'</span>';el.style.pointerEvents='none';canvas.appendChild(el)});selectionInfo()
+}
+async function moveItem(item,nr){
+ remember();
+ if(item.type==='object'){use(await api('/api/hall-objects/'+item.id,json('PATCH',nr)));return}
+ let t=item.obj,dx=nr.gx-item.r.gx,dy=nr.gy-item.r.gy;
+ builderSelected=new Set([t.id]);use(await api('/api/tables/bulk',json('POST',{ids:[t.id],action:'move',grid_dx:dx,grid_dy:dy,dx:0,dy:0})))
+}
+function wireBuilderGrid(){
+ let grid=$('#builderCanvas');if(!grid)return;
+ grid.onpointerdown=e=>{
+   if(e.button!==0)return;let p=cellXY(e);try{grid.setPointerCapture(e.pointerId)}catch{}e.preventDefault();
+   if(anchor&&builderTool!=='move'){let a=anchor;dropAnchor();applyRect(a,p);down={mode:'done'};return}
+   if(builderTool==='move'){
+     let hit=itemAt(p);builderSelected=hit&&hit.type==='table'?new Set([hit.id]):new Set();renderBuilder();
+     down={mode:hit?'drag':'none',item:hit,from:p,off:hit?{x:p.x-hit.r.gx,y:p.y-hit.r.gy}:{x:0,y:0},last:null};return
+   }
+   down={mode:'rect',start:p,cur:p};bandShow(p,p,builderTool==='erase')
+ };
+ grid.onpointermove=e=>{
+   if(!down){if(anchor)bandShow(anchor,cellXY(e),builderTool==='erase');return}
+   let p=cellXY(e);
+   if(down.mode==='rect'){down.cur=p;bandShow(down.start,p,builderTool==='erase');return}
+   if(down.mode==='drag'&&down.item){
+     let r=down.item.r,nr={...r,gx:clampI(p.x-down.off.x,0,GRID_COLS-r.gw),gy:clampI(p.y-down.off.y,0,GRID_ROWS-r.gh)};
+     if(allItems().some(q=>q.id!==down.item.id&&cellsClash(q.r,nr)))return;
+     down.last=nr;let node=down.item.type==='table'?grid.querySelector('[data-bid="'+down.item.id+'"]'):grid.querySelector('[data-oid="'+down.item.id+'"]');if(node)gridStyle(node,nr)
+   }
+ };
+ const up=e=>{
+   let d=down;down=null;try{grid.releasePointerCapture(e.pointerId)}catch{}
+   if(!d||d.mode==='done'){bandHide();return}
+   if(d.mode==='drag'){bandHide();if(d.item&&d.last&&(d.last.gx!==d.item.r.gx||d.last.gy!==d.item.r.gy))moveItem(d.item,d.last);else renderBuilder();return}
+   if(d.mode!=='rect'){bandHide();return}
+   if(d.start.x===d.cur.x&&d.start.y===d.cur.y){anchor=d.start;bandShow(anchor,anchor,builderTool==='erase');setHint(builderTool==='erase'?'🧽 עכשיו לחצו על הפינה הנגדית של המלבן למחיקה — או Esc לביטול.':'📐 פינה ראשונה נבחרה. עכשיו לחצו על הפינה הנגדית — או Esc לביטול.');return}
+   bandHide();applyRect(d.start,d.cur)
+ };
+ grid.onpointerup=up;grid.onpointercancel=up
+}
 async function bulk(action,extra={}){if(!builderSelected.size)return toast('יש לבחור פריט אחד לפחות');remember();use(await api('/api/tables/bulk',json('POST',{ids:[...builderSelected],action,...extra})))}
-function boxDown(e){if(builderTool!=='select'||e.target!==$('#builderCanvas')||e.button!==0)return;let r=$('#builderCanvas').getBoundingClientRect();selectBox={r,x:e.clientX-r.left,y:e.clientY-r.top};Object.assign($('#selectionBox').style,{display:'block',left:selectBox.x+'px',top:selectBox.y+'px',width:'0',height:'0'})}
-function boxMove(e){if(!selectBox)return;let x=e.clientX-selectBox.r.left,y=e.clientY-selectBox.r.top,l=Math.min(x,selectBox.x),t=Math.min(y,selectBox.y),w=Math.abs(x-selectBox.x),h=Math.abs(y-selectBox.y);selectBox.cur={l,t,w,h};Object.assign($('#selectionBox').style,{left:l+'px',top:t+'px',width:w+'px',height:h+'px'})}
-function boxUp(){if(!selectBox)return;let q=selectBox.cur;$('#selectionBox').style.display='none';if(q&&q.w>5&&q.h>5){let r=$('#builderCanvas').getBoundingClientRect();builderSelected=new Set(P.tables.filter(t=>{let g=gridRect(t),x=r.width-(g.gx+g.gw/2)*CELL,y=(g.gy+g.gh/2)*CELL;return x>=q.l&&x<=q.l+q.w&&y>=q.t&&y<=q.t+q.h}).map(t=>t.id));suppressClick=true}else builderSelected.clear();selectBox=null;renderBuilder()}
-function initHallBuilder(){applyGridDisplaySize(CELL,false);let gridInput=$('#gridCellSize');if(gridInput){gridInput.value=CELL;gridInput.oninput=()=>applyGridDisplaySize(gridInput.value);gridInput.onchange=()=>applyGridDisplaySize(gridInput.value)}$$('[data-grid-px]').forEach(b=>b.onclick=()=>applyGridDisplaySize(b.dataset.gridPx));$$('.layout-card').forEach(x=>x.onclick=()=>builderSetLayout(x.dataset.layout));$$('[data-tool]').forEach(x=>x.onclick=()=>setTool(x.dataset.tool));$('#generateLayout').onclick=async()=>{if((P.tables.length+P.hall_objects.length)&&!confirm('להחליף את המבנה הקיים?'))return;remember();use(await api('/api/layout/generate',json('POST',{mode:builderLayout==='square_tables'?'square':builderLayout==='rows'?'rows':'round',rows:+$('#genRows').value||5,cols:+$('#genCols').value||6,capacity:+$('#genCapacity').value||4})))};$('#clearLayout').onclick=async()=>{if((P.tables.length+P.hall_objects.length)&&!confirm('לנקות את כל המפה?'))return;remember();use(await api('/api/layout/clear',{method:'POST'}))};$('#selectAll').onclick=()=>{builderSelected=new Set(P.tables.map(t=>t.id));renderBuilder()};$('#duplicateSelected').onclick=()=>bulk('duplicate');$('#rotateSelected').onclick=()=>bulk('rotate',{degrees:90});$('#deleteSelected').onclick=()=>builderSelected.size&&confirm('למחוק את הפריטים שנבחרו?')&&bulk('delete');$$('[data-align]').forEach(x=>x.onclick=()=>bulk('align',{mode:x.dataset.align}));$('#distX').onclick=()=>bulk('distribute',{axis:'x'});$('#distY').onclick=()=>bulk('distribute',{axis:'y'});$('#undoBuilder').onclick=async()=>{if(!builderUndo.length)return toast('אין פעולה לביטול');builderRedo.push(builderSnapshot());await restore(builderUndo.pop())};$('#redoBuilder').onclick=async()=>{if(!builderRedo.length)return toast('אין פעולה להחזרה');builderUndo.push(builderSnapshot());await restore(builderRedo.pop())};let canvas=$('#builderCanvas');canvas.onpointerdown=e=>{if(!draftDown(e))boxDown(e)};canvas.onpointermove=e=>{draftMove(e);boxMove(e)};canvas.onpointerup=e=>{draftUp(e);boxUp()};canvas.onpointercancel=e=>{draftUp(e);boxUp()};document.addEventListener('keydown',e=>{if($('.view.active')?.id!=='view-builder')return;let k=e.key.toLowerCase();if(e.key==='Escape'){dropAnchor();draft=null}if(e.key==='Delete'&&builderSelected.size){e.preventDefault();$('#deleteSelected').click()}if((e.ctrlKey||e.metaKey)&&k==='a'){e.preventDefault();$('#selectAll').click()}if((e.ctrlKey||e.metaKey)&&k==='d'){e.preventDefault();$('#duplicateSelected').click()}if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();$('#undoBuilder').click()}if((e.ctrlKey||e.metaKey)&&k==='y'){e.preventDefault();$('#redoBuilder').click()}});setTool('select')}
+function initHallBuilder(){
+ applyGridDisplaySize(CELL,false);
+ let gi=$('#gridCellSize');if(gi){gi.value=CELL;gi.oninput=()=>applyGridDisplaySize(gi.value);gi.onchange=()=>applyGridDisplaySize(gi.value)}
+ $$('[data-grid-px]').forEach(b=>b.onclick=()=>applyGridDisplaySize(b.dataset.gridPx));$$('.layout-card').forEach(x=>x.onclick=()=>builderSetLayout(x.dataset.layout));$$('[data-tool]').forEach(x=>x.onclick=()=>setTool(x.dataset.tool));
+ $('#generateLayout').onclick=async()=>{if((P.tables.length+P.hall_objects.length)&&!confirm('להחליף את המבנה הקיים?'))return;remember();use(await api('/api/layout/generate',json('POST',{mode:builderLayout==='square_tables'?'square':builderLayout==='rows'?'rows':'round',rows:+$('#genRows').value||5,cols:+$('#genCols').value||6,capacity:+$('#genCapacity').value||4})))};
+ $('#clearLayout').onclick=async()=>{if((P.tables.length+P.hall_objects.length)&&!confirm('לנקות את כל המפה?'))return;remember();use(await api('/api/layout/clear',{method:'POST'}))};
+ $('#selectAll').onclick=()=>{builderSelected=new Set(P.tables.map(t=>t.id));renderBuilder()};$('#duplicateSelected').onclick=()=>bulk('duplicate');$('#rotateSelected').onclick=()=>bulk('rotate',{degrees:90});$('#deleteSelected').onclick=()=>builderSelected.size&&confirm('למחוק את הפריטים שנבחרו?')&&bulk('delete');$$('[data-align]').forEach(x=>x.onclick=()=>bulk('align',{mode:x.dataset.align}));$('#distX').onclick=()=>bulk('distribute',{axis:'x'});$('#distY').onclick=()=>bulk('distribute',{axis:'y'});
+ $('#undoBuilder').onclick=async()=>{if(!builderUndo.length)return toast('אין פעולה לביטול');builderRedo.push(builderSnapshot());await restore(builderUndo.pop())};$('#redoBuilder').onclick=async()=>{if(!builderRedo.length)return toast('אין פעולה להחזרה');builderUndo.push(builderSnapshot());await restore(builderRedo.pop())};
+ wireBuilderGrid();document.addEventListener('keydown',e=>{if($('.view.active')?.id!=='view-builder')return;let k=e.key.toLowerCase();if(e.key==='Escape')dropAnchor();if(e.key==='Delete'&&builderSelected.size){e.preventDefault();$('#deleteSelected').click()}if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();$('#undoBuilder').click()}if((e.ctrlKey||e.metaKey)&&k==='y'){e.preventDefault();$('#redoBuilder').click()}});setTool('move')
+}
 initHallBuilder();
 load();
 
