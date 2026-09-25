@@ -155,3 +155,15 @@ input,select,textarea{border-radius:9px!important;border:1px solid var(--line)!i
 #builderCanvas .kind-chair,#builderCanvas .kind-bench{border-radius:5px!important}
 #draftBand{border-radius:8px!important}
 #draftBand[data-kind="erase"]{border-color:#dc2626!important;background:#dc26261f!important}
+
+/* Unified hall geometry: builder, structure editor and assignment use the same board. */
+#hallCanvas.unified-hall-map,#assignCanvas.unified-hall-map{
+  --grid-cell:30px;position:relative!important;direction:rtl!important;max-width:none!important;
+  background-color:#f8fafc!important;
+  background-size:var(--grid-cell) var(--grid-cell)!important;
+  background-image:linear-gradient(to left,#cbd5e1 1px,transparent 1px),linear-gradient(to bottom,#cbd5e1 1px,transparent 1px)!important;
+}
+.dark #hallCanvas.unified-hall-map,.dark #assignCanvas.unified-hall-map{background-color:#101827!important;background-image:linear-gradient(to left,#34445a 1px,transparent 1px),linear-gradient(to bottom,#34445a 1px,transparent 1px)!important}
+#hallCanvas.unified-hall-map .table,#hallCanvas.unified-hall-map .hall-object,#assignCanvas.unified-hall-map .assign-slot,#assignCanvas.unified-hall-map .hall-object{position:absolute!important;box-sizing:border-box!important;margin:0!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important;overflow:hidden}
+#assignCanvas.unified-hall-map .assign-slot{padding:2px!important;border-radius:5px!important;font-size:9px!important}
+#assignCanvas.unified-hall-map .assign-icon{font-size:14px!important}#assignCanvas.unified-hall-map .assign-name{font-size:9px!important}#assignCanvas.unified-hall-map .assign-occupants{font-size:8px!important}#assignCanvas.unified-hall-map .assign-meta{font-size:7px!important}
