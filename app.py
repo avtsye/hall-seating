@@ -1,0 +1,294 @@
+import csv, io, json, os, uuid, copy
+from datetime import datetime
+from flask import Flask, jsonify, request, render_template, Response
+
+BASE=os.path.dirname(os.path.abspath(__file__))
+DATA=os.path.join(BASE,'data'); os.makedirs(DATA,exist_ok=True)
+STATE_FILE=os.path.join(DATA,'state.json')
+app=Flask(__name__)
+
+def uid(prefix): return f"{prefix}_{uuid.uuid4().hex[:10]}"
+def now(): return datetime.now().isoformat(timespec='seconds')
+
+def new_project(name='אולם חדש'):
+    tables=[]
+    for r in range(5):
+        for c in range(6):
+            tables.append({'id':uid('t'),'name':f'שולחן {r*6+c+1}','x':8+c*15.5,'y':14+r*16,'capacity':4,
+                           'rank':round(1+r*1.0+abs(c-2.5)*.35,2),'custom_rank':False,'locked':False})
+    return {'id':uid('p'),'name':name,'created':now(),'modified':now(),
+            'hall':{'name':'האולם','stage_label':'חזית / במה','width':100,'height':100},
+            'tables':tables,'groups':[], 'people':[], 'rules':[], 'snapshots':[]}
+
+def default_state():
+    p=new_project('השיבוץ הראשון')
+    return {'version':2,'active_project':p['id'],'projects':[p]}
+
+def load():
+    if not os.path.exists(STATE_FILE):
+        s=default_state(); save(s); return s
+    try:
+        with open(STATE_FILE,encoding='utf-8') as f: return json.load(f)
+    except Exception:
+        s=default_state(); save(s); return s
+
+def save(s):
+    with open(STATE_FILE,'w',encoding='utf-8') as f: json.dump(s,f,ensure_ascii=False,indent=2)
+STATE=load()
+
+def project():
+    pid=STATE.get('active_project')
+    return next((p for p in STATE['projects'] if p['id']==pid),None)
+def touch(p): p['modified']=now(); save(STATE)
+def person_by_id(p,pid): return next((x for x in p['people'] if x['id']==pid),None)
+def table_by_id(p,tid): return next((x for x in p['tables'] if x['id']==tid),None)
+def group_by_id(p,gid): return next((x for x in p['groups'] if x['id']==gid),None)
+def occupants(p,tid): return [x for x in p['people'] if x.get('table_id')==tid]
+def free_seat(p,t):
+    used={x.get('seat') for x in occupants(p,t['id'])}
+    return next((i for i in range(t['capacity']) if i not in used),None)
+def renumber_groups(p):
+    p['groups'].sort(key=lambda g:g.get('priority',9999))
+    for i,g in enumerate(p['groups'],1): g['priority']=i
+
+def violations(p):
+    out=[]; by={x['id']:x for x in p['people']}
+    for rule in p['rules']:
+        ids=[i for i in rule.get('people',[]) if i in by]
+        if not ids: continue
+        typ=rule.get('type'); bad=False; msg=''
+        if typ=='together' and len(ids)>1:
+            seats=[by[i].get('table_id') for i in ids]
+            bad=any(not x for x in seats) or len(set(seats))>1
+            msg='האנשים בכלל אינם יושבים יחד באותו שולחן'
+        elif typ=='separate' and len(ids)>1:
+            seats=[by[i].get('table_id') for i in ids if by[i].get('table_id')]
+            bad=len(seats)!=len(set(seats)); msg='אנשים שאמורים להיות בנפרד יושבים באותו שולחן'
+        elif typ in ('at_table','not_table') and len(ids)==1:
+            cur=by[ids[0]].get('table_id'); target=rule.get('table_id')
+            bad=(cur!=target) if typ=='at_table' else (cur==target); msg='השיבוץ אינו עומד בדרישת השולחן'
+        if bad: out.append({'rule_id':rule['id'],'level':rule.get('level','soft'),'message':msg})
+    return out
+
+def score_candidate(p,person,t,group_priority):
+    score=float(t.get('rank',999))*10 + group_priority*2
+    same=sum(1 for x in occupants(p,t['id']) if x.get('group_id')==person.get('group_id'))
+    other=len(occupants(p,t['id']))-same
+    score-=same*9; score+=other*2
+    for r in p['rules']:
+        if person['id'] not in r.get('people',[]): continue
+        penalty=100000 if r.get('level')=='hard' else 180; typ=r.get('type')
+        if typ=='at_table' and t['id']!=r.get('table_id'): score+=penalty
+        elif typ=='not_table' and t['id']==r.get('table_id'): score+=penalty
+        elif typ=='together':
+            mates=[person_by_id(p,i) for i in r.get('people',[]) if i!=person['id']]
+            seated=[m for m in mates if m and m.get('table_id')]
+            if seated and any(m['table_id']!=t['id'] for m in seated): score+=penalty
+        elif typ=='separate':
+            mates=set(r.get('people',[]))-{person['id']}
+            if any(o['id'] in mates for o in occupants(p,t['id'])): score+=penalty
+    return score
+
+@app.get('/')
+def index(): return render_template('index.html')
+@app.get('/api/state')
+def state(): return jsonify({'state':STATE,'project':project(),'violations':violations(project()) if project() else []})
+
+@app.post('/api/projects')
+def add_project():
+    d=request.get_json(force=True); p=new_project((d.get('name') or 'פרויקט חדש').strip())
+    STATE['projects'].append(p); STATE['active_project']=p['id']; save(STATE); return state()
+@app.post('/api/projects/<pid>/activate')
+def activate(pid):
+    if not any(p['id']==pid for p in STATE['projects']): return jsonify(error='project not found'),404
+    STATE['active_project']=pid; save(STATE); return state()
+@app.delete('/api/projects/<pid>')
+def del_project(pid):
+    if len(STATE['projects'])<=1: return jsonify(error='לא ניתן למחוק את הפרויקט האחרון'),400
+    STATE['projects']=[p for p in STATE['projects'] if p['id']!=pid]
+    if STATE['active_project']==pid: STATE['active_project']=STATE['projects'][0]['id']
+    save(STATE); return state()
+@app.post('/api/project/name')
+def project_name():
+    p=project(); p['name']=(request.get_json(force=True).get('name') or p['name']).strip(); touch(p); return state()
+
+@app.post('/api/hall')
+def hall():
+    p=project(); d=request.get_json(force=True)
+    for k in ('name','stage_label'):
+        if k in d: p['hall'][k]=str(d[k]).strip()
+    touch(p); return state()
+
+@app.post('/api/tables')
+def add_table():
+    p=project(); d=request.get_json(force=True)
+    t={'id':uid('t'),'name':(d.get('name') or f"שולחן {len(p['tables'])+1}").strip(),
+       'x':float(d.get('x',50)),'y':float(d.get('y',50)),'capacity':max(1,int(d.get('capacity',4))),
+       'rank':float(d.get('rank',10)),'custom_rank':True,'locked':False}
+    p['tables'].append(t); touch(p); return state()
+@app.patch('/api/tables/<tid>')
+def edit_table(tid):
+    p=project(); t=table_by_id(p,tid)
+    if not t:return jsonify(error='table not found'),404
+    d=request.get_json(force=True)
+    if 'name' in d:t['name']=str(d['name']).strip()
+    for k in ('x','y','rank'):
+        if k in d:t[k]=float(d[k])
+    if 'capacity' in d:
+        cap=max(1,int(d['capacity'])); occ=occupants(p,tid)
+        if len(occ)>cap:return jsonify(error='יש יותר משובצים מהקיבולת החדשה'),400
+        t['capacity']=cap
+    if 'locked' in d:t['locked']=bool(d['locked'])
+    touch(p); return state()
+@app.delete('/api/tables/<tid>')
+def delete_table(tid):
+    p=project()
+    for x in occupants(p,tid):
+        if x.get('locked'): return jsonify(error='יש בשולחן אדם נעול. בטל נעילה לפני מחיקה'),400
+        x['table_id']=None;x['seat']=None
+    p['tables']=[t for t in p['tables'] if t['id']!=tid]; p['rules']=[r for r in p['rules'] if r.get('table_id')!=tid]
+    touch(p); return state()
+
+@app.post('/api/groups')
+def add_group():
+    p=project(); d=request.get_json(force=True); name=(d.get('name') or '').strip()
+    if not name:return jsonify(error='חסר שם קבוצה'),400
+    if any(g['name']==name for g in p['groups']):return jsonify(error='הקבוצה כבר קיימת'),400
+    p['groups'].append({'id':uid('g'),'name':name,'priority':len(p['groups'])+1}); touch(p); return state()
+@app.post('/api/groups/reorder')
+def reorder_groups():
+    p=project(); order=request.get_json(force=True).get('order',[]); mp={g['id']:g for g in p['groups']}
+    p['groups']=[mp[i] for i in order if i in mp]+[g for g in p['groups'] if g['id'] not in order]
+    renumber_groups(p); touch(p); return state()
+@app.delete('/api/groups/<gid>')
+def delete_group(gid):
+    p=project()
+    if any(x.get('group_id')==gid for x in p['people']): return jsonify(error='הקבוצה עדיין מכילה אנשים'),400
+    p['groups']=[g for g in p['groups'] if g['id']!=gid]; renumber_groups(p); touch(p); return state()
+
+@app.post('/api/people')
+def add_person():
+    p=project(); d=request.get_json(force=True); name=(d.get('name') or '').strip(); gid=d.get('group_id')
+    if not name:return jsonify(error='חסר שם'),400
+    if any(x['name']==name for x in p['people']):return jsonify(error='השם כבר קיים'),400
+    if gid and not group_by_id(p,gid):return jsonify(error='group not found'),400
+    p['people'].append({'id':uid('u'),'name':name,'group_id':gid,'table_id':None,'seat':None,'locked':False,'note':''}); touch(p); return state()
+@app.patch('/api/people/<pid>')
+def edit_person(pid):
+    p=project(); x=person_by_id(p,pid)
+    if not x:return jsonify(error='person not found'),404
+    d=request.get_json(force=True)
+    for k in ('name','group_id','note'):
+        if k in d:x[k]=d[k]
+    if 'locked' in d:x['locked']=bool(d['locked'])
+    touch(p); return state()
+@app.delete('/api/people/<pid>')
+def delete_person(pid):
+    p=project(); p['people']=[x for x in p['people'] if x['id']!=pid]
+    for r in p['rules']:r['people']=[i for i in r.get('people',[]) if i!=pid]
+    p['rules']=[r for r in p['rules'] if r.get('people')]; touch(p); return state()
+@app.post('/api/people/upload')
+def upload_people():
+    p=project(); f=request.files.get('file')
+    if not f:return jsonify(error='לא נבחר קובץ'),400
+    raw=f.read().decode('utf-8-sig'); rows=list(csv.reader(io.StringIO(raw))); added=0
+    for row in rows:
+        if not row:continue
+        name=row[0].strip(); gname=row[1].strip() if len(row)>1 else ''
+        if name.lower() in ('name','שם'):continue
+        if not name or any(x['name']==name for x in p['people']):continue
+        gid=None
+        if gname:
+            g=next((g for g in p['groups'] if g['name']==gname),None)
+            if not g:
+                g={'id':uid('g'),'name':gname,'priority':len(p['groups'])+1};p['groups'].append(g)
+            gid=g['id']
+        p['people'].append({'id':uid('u'),'name':name,'group_id':gid,'table_id':None,'seat':None,'locked':False,'note':''});added+=1
+    touch(p); return jsonify(added=added,**state().get_json())
+
+@app.post('/api/seat')
+def seat():
+    p=project(); d=request.get_json(force=True); x=person_by_id(p,d.get('person_id'))
+    if not x:return jsonify(error='person not found'),404
+    tid=d.get('table_id')
+    if tid is None:
+        if x.get('locked'):return jsonify(error='האדם נעול למקומו'),400
+        x['table_id']=None;x['seat']=None;touch(p);return state()
+    t=table_by_id(p,tid)
+    if not t:return jsonify(error='table not found'),404
+    seat=d.get('seat'); seat=int(seat) if seat is not None else free_seat(p,t)
+    if seat is None or seat<0 or seat>=t['capacity']:return jsonify(error='אין מקום פנוי'),400
+    occ=next((o for o in p['people'] if o.get('table_id')==tid and o.get('seat')==seat and o['id']!=x['id']),None)
+    if occ and occ.get('locked'):return jsonify(error='המקום תפוס על ידי אדם נעול'),400
+    old=(x.get('table_id'),x.get('seat')); x['table_id']=tid;x['seat']=seat
+    if occ:occ['table_id'],occ['seat']=old
+    touch(p);return state()
+
+@app.post('/api/rules')
+def add_rule():
+    p=project(); d=request.get_json(force=True); typ=d.get('type'); people=d.get('people',[])
+    if typ not in ('together','separate','at_table','not_table'):return jsonify(error='סוג כלל לא תקין'),400
+    if not people:return jsonify(error='יש לבחור אנשים לכלל'),400
+    p['rules'].append({'id':uid('r'),'type':typ,'level':d.get('level','soft'),'people':people,'table_id':d.get('table_id')}); touch(p);return state()
+@app.delete('/api/rules/<rid>')
+def delete_rule(rid):
+    p=project();p['rules']=[r for r in p['rules'] if r['id']!=rid];touch(p);return state()
+
+@app.post('/api/assign')
+def assign():
+    p=project()
+    for x in p['people']:
+        if not x.get('locked') and not (x.get('table_id') and (table_by_id(p,x['table_id']) or {}).get('locked')):
+            x['table_id']=None;x['seat']=None
+    gp={g['id']:g['priority'] for g in p['groups']}
+    pending=[x for x in p['people'] if not x.get('table_id')]
+    pending.sort(key=lambda x:(gp.get(x.get('group_id'),999),x['name'])); un=[]
+    for x in pending:
+        candidates=[]
+        for t in p['tables']:
+            if t.get('locked') or free_seat(p,t) is None:continue
+            candidates.append((score_candidate(p,x,t,gp.get(x.get('group_id'),999)),t))
+        if not candidates:un.append(x['name']);continue
+        candidates.sort(key=lambda z:z[0]); t=candidates[0][1]; x['table_id']=t['id'];x['seat']=free_seat(p,t)
+    touch(p);return jsonify(unseated=un,**state().get_json())
+@app.post('/api/reset')
+def reset():
+    p=project()
+    for x in p['people']:
+        if not x.get('locked'):x['table_id']=None;x['seat']=None
+    touch(p);return state()
+
+@app.post('/api/snapshots')
+def snapshot():
+    p=project(); d=request.get_json(force=True)
+    snap={'id':uid('s'),'name':(d.get('name') or f"גרסה {len(p['snapshots'])+1}").strip(),'created':now(),
+          'people':copy.deepcopy(p['people']),'tables':copy.deepcopy(p['tables']),'groups':copy.deepcopy(p['groups']),'rules':copy.deepcopy(p['rules'])}
+    p['snapshots'].append(snap);touch(p);return state()
+@app.post('/api/snapshots/<sid>/restore')
+def restore_snapshot(sid):
+    p=project();s=next((s for s in p['snapshots'] if s['id']==sid),None)
+    if not s:return jsonify(error='snapshot not found'),404
+    for k in ('people','tables','groups','rules'):p[k]=copy.deepcopy(s[k])
+    touch(p);return state()
+
+@app.get('/api/export')
+def export_csv():
+    p=project(); out=io.StringIO();out.write('\ufeff');w=csv.writer(out);w.writerow(['שם','קבוצה','שולחן','מקום','דירוג','נעול'])
+    gm={g['id']:g['name'] for g in p['groups']};tm={t['id']:t for t in p['tables']}
+    for x in sorted(p['people'],key=lambda x:(tm.get(x.get('table_id'),{}).get('rank',99999),x.get('seat') or 0,x['name'])):
+        t=tm.get(x.get('table_id'));w.writerow([x['name'],gm.get(x.get('group_id'),''),t['name'] if t else '',(x.get('seat')+1) if x.get('seat') is not None else '',t['rank'] if t else '', 'כן' if x.get('locked') else ''])
+    r=Response(out.getvalue(),mimetype='text/csv; charset=utf-8');r.headers['Content-Disposition']='attachment; filename=hall-seating.csv';return r
+@app.get('/api/backup')
+def backup():
+    r=Response(json.dumps(STATE,ensure_ascii=False,indent=2),mimetype='application/json');r.headers['Content-Disposition']='attachment; filename=hall-seating-backup.json';return r
+@app.post('/api/backup')
+def restore_backup():
+    global STATE
+    f=request.files.get('file')
+    if not f:return jsonify(error='לא נבחר קובץ'),400
+    try:s=json.load(f)
+    except Exception:return jsonify(error='קובץ גיבוי לא תקין'),400
+    if not isinstance(s,dict) or 'projects' not in s:return jsonify(error='מבנה גיבוי לא תקין'),400
+    STATE=s;save(STATE);return state()
+
+if __name__=='__main__': app.run(host='127.0.0.1',port=5000,debug=False)
